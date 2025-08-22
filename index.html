@@ -28,10 +28,9 @@
         </div>
 
         <div id="game-control-section" class="hidden">
-            <div id="captain-controls" class="hidden">
-                <h3>Game Captain Controls</h3>
-                <button id="start-game-btn" class="btn-primary">🚀 Start Game</button>
-                <p class="help-text">Start the game when all teams are ready</p>
+            <div id="simple-start">
+                <button id="start-game-simple" class="btn-primary">🚀 Start Game</button>
+                <p>Anyone can start when teams are ready</p>
             </div>
 
             <div id="game-status">
@@ -371,21 +370,15 @@ function startGame(teamData, playerData, gameData) {
 
 function setupLobby(teamData, playerData, gameData, code) {
     const controlSection = document.getElementById('game-control-section');
-    const captainControls = document.getElementById('captain-controls');
     if (controlSection) controlSection.classList.remove('hidden');
-    if (playerData.is_captain && captainControls) {
-        captainControls.classList.remove('hidden');
-    }
 
-    const startBtn = document.getElementById('start-game-btn');
+    const startBtn = document.getElementById('start-game-simple');
     if (startBtn) {
         startBtn.onclick = async () => {
             showLoading();
             try {
                 await fetch(`api/game.php?action=start&code=${code}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ device_id: getDeviceId() })
+                    method: 'POST'
                 });
             } catch (e) {
                 alert('Network error');
@@ -420,7 +413,7 @@ function setupLobby(teamData, playerData, gameData, code) {
                     teamDataRes.teams.forEach(t => {
                         const div = document.createElement('div');
                         div.className = `team-card role-${t.role}`;
-                        const players = t.players.map(p => `${p.display_name}${p.is_captain ? ' 👑' : ''}`).join(', ');
+                        const players = t.players.map(p => p.display_name).join(', ');
                         div.innerHTML = `<strong>${t.name}</strong><div>${players}</div>`;
                         summary.appendChild(div);
                     });
@@ -467,7 +460,7 @@ function showTeamSelection(gameData, code, playerName) {
                       data.teams.forEach(team => {
                           const div = document.createElement('div');
                           div.className = `team-card role-${team.role}`;
-                          const players = team.players.map(p => `${p.display_name}${p.is_captain ? ' 👑' : ''}`).join(', ');
+                          const players = team.players.map(p => p.display_name).join(', ');
                           div.innerHTML = `
                               <span class="team-name">${team.name}</span>
                               <span class="player-count">${team.player_count} players</span>

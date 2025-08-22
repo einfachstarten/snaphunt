@@ -4,6 +4,7 @@ CREATE TABLE games (
     join_code VARCHAR(8) NOT NULL UNIQUE,
     status ENUM('waiting','active','finished') NOT NULL DEFAULT 'waiting',
     photo_interval_seconds INT NOT NULL DEFAULT 120,
+    started_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
