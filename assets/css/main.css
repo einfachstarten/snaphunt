@@ -8,6 +8,30 @@
     box-sizing: border-box;
 }
 
+.primary-action {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+    background: var(--role-color);
+    border: none;
+    color: white;
+    border-radius: 8px;
+}
+
+#slot-code-visual {
+    font-size: 2rem;
+    text-align: center;
+    padding: 1rem;
+    background: #f0f0f0;
+    border-radius: 8px;
+    margin: 0.5rem 0;
+}
+
+#upload-preview img {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
 body {
     margin: 0;
     font-family: Arial, sans-serif;

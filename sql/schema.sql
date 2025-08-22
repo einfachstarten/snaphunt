@@ -30,11 +30,11 @@ CREATE TABLE players (
 CREATE TABLE photo_slots (
     id INT AUTO_INCREMENT PRIMARY KEY,
     game_id INT NOT NULL,
-    team_id INT NOT NULL,
     slot_number INT NOT NULL,
+    slot_code VARCHAR(8) NOT NULL,
+    deadline DATETIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (game_id) REFERENCES games(id),
-    FOREIGN KEY (team_id) REFERENCES teams(id)
+    FOREIGN KEY (game_id) REFERENCES games(id)
 );
 
 CREATE TABLE photos (
@@ -42,6 +42,9 @@ CREATE TABLE photos (
     slot_id INT NOT NULL,
     player_id INT NOT NULL,
     file_path VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    file_size INT NOT NULL,
+    mime_type VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (slot_id) REFERENCES photo_slots(id),
     FOREIGN KEY (player_id) REFERENCES players(id)

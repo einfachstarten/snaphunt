@@ -188,9 +188,110 @@ function startGame(teamData, playerData, gameData) {
     controls.innerHTML = '';
     if (teamData.role === 'hunted') {
         controls.innerHTML = `
-            <button id="upload-photo" class="primary-action">Upload Photo</button>
-            <div id="photo-slot">Next slot in: <span id="photo-slot-timer">--:--</span></div>
-            <div id="loc-status">Location: sharing</div>`;
+        <div id="hunted-controls">
+            <div id="photo-slot-info">
+                <h3>Photo Slot: <span id="current-slot-code">--</span></h3>
+                <div id="slot-timer">Upload required in: <span id="slot-countdown">--:--</span></div>
+            </div>
+            <div id="photo-upload-section">
+                <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
+                <button id="take-photo-btn" class="primary-action">📸 Upload Photo</button>
+                <div id="upload-preview"></div>
+                <div id="upload-status"></div>
+            </div>
+            <div id="slot-code-display">
+                <p>Include this code in your photo:</p>
+                <div id="slot-code-visual">--</div>
+            </div>
+        </div>`;
+
+        const joinInfo = JSON.parse(localStorage.getItem('currentGame'));
+        const slotCodeEl = document.getElementById('current-slot-code');
+        const slotVisual = document.getElementById('slot-code-visual');
+        const countdownEl = document.getElementById('slot-countdown');
+        let currentSlot = null;
+        let slotTimer = null;
+
+        async function refreshSlot() {
+            try {
+                const res = await fetch(`api/game.php?action=current_slot&code=${joinInfo.code}`);
+                const data = await res.json();
+                if (res.ok) {
+                    currentSlot = data;
+                    slotCodeEl.textContent = data.slot_code;
+                    slotVisual.textContent = data.slot_code;
+                    startCountdown(new Date(data.deadline).getTime());
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function startCountdown(endTime) {
+            if (slotTimer) clearInterval(slotTimer);
+            slotTimer = setInterval(() => {
+                const rem = Math.max(0, Math.floor((endTime - Date.now())/1000));
+                const m = Math.floor(rem / 60);
+                const s = rem % 60;
+                countdownEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+                if (rem <= 0) clearInterval(slotTimer);
+            }, 1000);
+        }
+
+        const fileInput = document.getElementById('photo-input');
+        const takePhotoBtn = document.getElementById('take-photo-btn');
+        const preview = document.getElementById('upload-preview');
+        const statusEl = document.getElementById('upload-status');
+
+        takePhotoBtn.onclick = () => fileInput.click();
+        fileInput.onchange = async () => {
+            const file = fileInput.files[0];
+            if (!file || !currentSlot) return;
+            preview.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            preview.appendChild(img);
+
+            const fd = new FormData();
+            fd.append('slot_id', currentSlot.slot_id);
+            fd.append('team_id', teamData.id);
+            fd.append('player_id', playerData.id);
+            fd.append('slot_code_verification', currentSlot.slot_code);
+            fd.append('photo', file);
+            statusEl.textContent = 'Uploading...';
+            try {
+                const res = await fetch('api/photo.php?action=upload', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (res.ok) {
+                    statusEl.textContent = 'Uploaded!';
+                    loadRecentPhotos();
+                    refreshSlot();
+                } else {
+                    statusEl.textContent = data.error || 'Upload failed';
+                }
+            } catch (e) {
+                statusEl.textContent = 'Network error';
+            }
+            fileInput.value = '';
+        };
+
+        async function loadRecentPhotos() {
+            try {
+                const res = await fetch(`api/photo.php?action=recent&game_id=${gameData.id}`);
+                const data = await res.json();
+                if (res.ok) {
+                    const container = document.getElementById('photos-container');
+                    container.innerHTML = '';
+                    data.photos.forEach(p => {
+                        const img = document.createElement('img');
+                        img.src = p.file_path;
+                        img.title = `${p.team_name} - ${p.slot_code}`;
+                        container.prepend(img);
+                    });
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        refreshSlot();
+        loadRecentPhotos();
     } else {
         controls.innerHTML = `
             <button id="request-location" class="primary-action">Request Location</button>
