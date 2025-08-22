@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snaphunt</title>
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-o9N1j7SoDw7e9iLFNMGxVg0jjDPzLwE0XNyBlt8mPLo="
+        crossorigin=""
+    />
+</head>
+<body>
+    <div id="loading-screen" class="screen">Loading...</div>
+
+    <div id="join-screen" class="screen hidden">
+        <h1>Join Game</h1>
+        <input type="text" placeholder="Join Code" />
+        <button id="join-button">Join</button>
+    </div>
+
+    <div id="game-screen" class="screen hidden">
+        <div id="map"></div>
+    </div>
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-QVfgPfnBE3ZM4AeQUwGDi5KknpsosiBwPGG/J4m7MQw="
+        crossorigin=""
+    ></script>
+    <script src="assets/js/app.js"></script>
+</body>
+</html>
