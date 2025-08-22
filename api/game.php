@@ -29,6 +29,17 @@ function generate_join_code(PDO $pdo): string
     return $code;
 }
 
+function generate_slot_code(): string
+{
+    // Emoji target plus two random alphanumeric characters
+    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    $code = '🎯';
+    for ($i = 0; $i < 2; $i++) {
+        $code .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    return $code;
+}
+
 try {
     switch ($action) {
         case 'create':
@@ -115,6 +126,74 @@ try {
                 'status' => $game['status'],
                 'active_teams' => $teams,
                 'current_photo_slot' => $slot,
+            ]);
+            break;
+
+        case 'current_slot':
+            $code = $_GET['code'] ?? '';
+            if (!preg_match('/^[A-Z0-9]{6}$/', $code)) {
+                send_response(400, ['error' => 'Invalid join code']);
+            }
+            $stmt = $pdo->prepare('SELECT id, photo_interval_seconds FROM games WHERE join_code = ?');
+            $stmt->execute([$code]);
+            $game = $stmt->fetch();
+            if (!$game) {
+                send_response(404, ['error' => 'Game not found']);
+            }
+            $stmt = $pdo->prepare('SELECT * FROM photo_slots WHERE game_id = ? ORDER BY slot_number DESC LIMIT 1');
+            $stmt->execute([$game['id']]);
+            $slot = $stmt->fetch();
+            if (!$slot || strtotime($slot['deadline']) < time()) {
+                // create new slot if none or expired
+                $nextNum = $slot ? ($slot['slot_number'] + 1) : 1;
+                $codeSlot = generate_slot_code();
+                $deadline = date('Y-m-d H:i:s', time() + (int)$game['photo_interval_seconds']);
+                $stmt = $pdo->prepare('INSERT INTO photo_slots (game_id, slot_number, slot_code, deadline) VALUES (?, ?, ?, ?)');
+                $stmt->execute([$game['id'], $nextNum, $codeSlot, $deadline]);
+                $slot = [
+                    'id' => $pdo->lastInsertId(),
+                    'slot_number' => $nextNum,
+                    'slot_code' => $codeSlot,
+                    'deadline' => $deadline
+                ];
+            }
+            $time_remaining = max(0, strtotime($slot['deadline']) - time());
+            send_response(200, [
+                'success' => true,
+                'slot_id' => (int)$slot['id'],
+                'slot_number' => (int)$slot['slot_number'],
+                'slot_code' => $slot['slot_code'],
+                'deadline' => $slot['deadline'],
+                'time_remaining' => $time_remaining
+            ]);
+            break;
+
+        case 'create_slot':
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                send_response(400, ['error' => 'Invalid request method']);
+            }
+            $code = $_GET['code'] ?? '';
+            if (!preg_match('/^[A-Z0-9]{6}$/', $code)) {
+                send_response(400, ['error' => 'Invalid join code']);
+            }
+            $stmt = $pdo->prepare('SELECT id, photo_interval_seconds FROM games WHERE join_code = ?');
+            $stmt->execute([$code]);
+            $game = $stmt->fetch();
+            if (!$game) {
+                send_response(404, ['error' => 'Game not found']);
+            }
+            $stmt = $pdo->prepare('SELECT COALESCE(MAX(slot_number),0) AS slot FROM photo_slots WHERE game_id = ?');
+            $stmt->execute([$game['id']]);
+            $nextNum = (int)$stmt->fetch()['slot'] + 1;
+            $codeSlot = generate_slot_code();
+            $deadline = date('Y-m-d H:i:s', time() + (int)$game['photo_interval_seconds']);
+            $stmt = $pdo->prepare('INSERT INTO photo_slots (game_id, slot_number, slot_code, deadline) VALUES (?, ?, ?, ?)');
+            $stmt->execute([$game['id'], $nextNum, $codeSlot, $deadline]);
+            send_response(200, [
+                'success' => true,
+                'slot_id' => $pdo->lastInsertId(),
+                'slot_code' => $codeSlot,
+                'deadline' => $deadline
             ]);
             break;
 
