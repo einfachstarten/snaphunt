@@ -52,3 +52,55 @@ button {
         height: 100vh;
     }
 }
+
+#team-screen {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+#teams-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.team-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    background: #fff;
+}
+
+.team-card.role-hunted {
+    border-left: 4px solid crimson;
+}
+
+.team-card.role-hunter {
+    border-left: 4px solid green;
+}
+
+#create-team {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+#create-team input,
+#create-team select,
+#create-team button {
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
+@media (min-width: 600px) {
+    #teams-list {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    .team-card {
+        width: calc(50% - 0.5rem);
+    }
+}
