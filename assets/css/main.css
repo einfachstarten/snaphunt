@@ -19,6 +19,11 @@ body {
     padding: 1rem;
 }
 
+.screen.active {
+    display: block;
+}
+
+.screen.hidden,
 .hidden {
     display: none;
 }
