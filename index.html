@@ -41,7 +41,39 @@
     </div>
 
     <div id="game-screen" class="screen hidden">
-        <div id="map"></div>
+        <header id="game-header">
+            <div id="game-info">
+                <span id="game-name">Game Name</span>
+                <span id="team-role" class="role-badge">HUNTER</span>
+            </div>
+            <div id="game-status">
+                <span id="photo-timer">Next photo in: 2:00</span>
+                <span id="game-timer">Game time: 00:00</span>
+            </div>
+        </header>
+
+        <main id="game-main">
+            <div id="map-container">
+                <div id="map"></div>
+                <div id="map-controls">
+                    <button id="center-map">📍 Center</button>
+                    <button id="toggle-fullscreen">🔍 Fullscreen</button>
+                </div>
+            </div>
+
+            <div id="game-controls">
+                <div id="role-specific-controls">
+                    <!-- Controls will be dynamically added based on role -->
+                </div>
+
+                <div id="photo-feed">
+                    <h3>Recent Photos</h3>
+                    <div id="photos-container"></div>
+                </div>
+            </div>
+        </main>
+
+        <button id="leave-game">Leave Game</button>
     </div>
 
     <!-- Global error handlers -->
@@ -75,13 +107,140 @@ function storeSession(gameData, teamData, playerData, code) {
     localStorage.setItem('currentPlayer', JSON.stringify(playerData));
 }
 
-function startGame() {
+const gameState = {
+    game: null,
+    team: null,
+    player: null,
+    status: 'waiting',
+    map: null,
+    marker: null,
+    watchId: null,
+    timers: { game: null, photo: null }
+};
+
+function startGame(teamData, playerData, gameData) {
     const teamScreen = document.getElementById('team-screen');
     const gameScreen = document.getElementById('game-screen');
+
     teamScreen.classList.add('hidden');
     teamScreen.classList.remove('active');
     gameScreen.classList.remove('hidden');
     gameScreen.classList.add('active');
+
+    gameState.game = gameData;
+    gameState.team = teamData;
+    gameState.player = playerData;
+    gameState.status = 'active';
+
+    // Update header
+    document.getElementById('game-name').textContent = gameData.name;
+    const roleBadge = document.getElementById('team-role');
+    roleBadge.textContent = teamData.role.toUpperCase();
+    roleBadge.classList.remove('hunter', 'hunted');
+    roleBadge.classList.add(teamData.role);
+    gameScreen.classList.remove('role-hunter', 'role-hunted');
+    gameScreen.classList.add(`role-${teamData.role}`);
+
+    // Initialize map
+    if (gameState.map) {
+        gameState.map.remove();
+    }
+    gameState.map = L.map('map').setView([48.2082, 16.3738], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(gameState.map);
+
+    // Map controls
+    document.getElementById('center-map').onclick = () => {
+        if (gameState.marker) {
+            gameState.map.setView(gameState.marker.getLatLng());
+        }
+    };
+    document.getElementById('toggle-fullscreen').onclick = () => {
+        document.getElementById('map-container').classList.toggle('fullscreen');
+        gameState.map.invalidateSize();
+    };
+
+    // Geolocation
+    if (navigator.geolocation) {
+        gameState.watchId = navigator.geolocation.watchPosition(pos => {
+            const latlng = [pos.coords.latitude, pos.coords.longitude];
+            if (!gameState.marker) {
+                gameState.marker = L.marker(latlng).addTo(gameState.map);
+            } else {
+                gameState.marker.setLatLng(latlng);
+            }
+            gameState.map.setView(latlng);
+            const locStatus = document.getElementById('loc-status');
+            if (locStatus) locStatus.textContent = 'Location: sharing';
+        }, err => {
+            console.warn('Geolocation error', err);
+            const locStatus = document.getElementById('loc-status');
+            if (locStatus) locStatus.textContent = 'Location: unavailable';
+        }, { enableHighAccuracy: true });
+    } else {
+        console.warn('Geolocation not supported');
+    }
+
+    // Role specific controls
+    const controls = document.getElementById('role-specific-controls');
+    controls.innerHTML = '';
+    if (teamData.role === 'hunted') {
+        controls.innerHTML = `
+            <button id="upload-photo" class="primary-action">Upload Photo</button>
+            <div id="photo-slot">Next slot in: <span id="photo-slot-timer">--:--</span></div>
+            <div id="loc-status">Location: sharing</div>`;
+    } else {
+        controls.innerHTML = `
+            <button id="request-location" class="primary-action">Request Location</button>
+            <button id="attempt-capture">Capture</button>
+            <div id="distance-info">Distance: --</div>`;
+    }
+
+    // Timers
+    const gameTimerEl = document.getElementById('game-timer');
+    const photoTimerEl = document.getElementById('photo-timer');
+    let gameSeconds = 0;
+    if (gameState.timers.game) clearInterval(gameState.timers.game);
+    gameState.timers.game = setInterval(() => {
+        gameSeconds++;
+        const m = Math.floor(gameSeconds / 60);
+        const s = gameSeconds % 60;
+        gameTimerEl.textContent = `Game time: ${m}:${s.toString().padStart(2,'0')}`;
+    }, 1000);
+
+    let photoSeconds = 120;
+    if (gameState.timers.photo) clearInterval(gameState.timers.photo);
+    gameState.timers.photo = setInterval(() => {
+        photoSeconds--;
+        if (photoSeconds < 0) photoSeconds = 120;
+        const m = Math.floor(photoSeconds / 60);
+        const s = photoSeconds % 60;
+        photoTimerEl.textContent = `Next photo in: ${m}:${s.toString().padStart(2,'0')}`;
+    }, 1000);
+
+    // Leave game
+    document.getElementById('leave-game').onclick = () => {
+        if (confirm('Leave game?')) {
+            if (gameState.watchId) navigator.geolocation.clearWatch(gameState.watchId);
+            Object.values(gameState.timers).forEach(t => t && clearInterval(t));
+            if (gameState.map) {
+                gameState.map.remove();
+                gameState.map = null;
+            }
+            localStorage.removeItem('currentGame');
+            localStorage.removeItem('currentTeam');
+            localStorage.removeItem('currentPlayer');
+
+            const joinScreen = document.getElementById('join-screen');
+            gameScreen.classList.add('hidden');
+            gameScreen.classList.remove('active');
+            joinScreen.classList.remove('hidden');
+            joinScreen.classList.add('active');
+            gameState.status = 'finished';
+        }
+    };
 }
 
 function showTeamSelection(gameData, code, playerName) {
@@ -137,7 +296,7 @@ function showTeamSelection(gameData, code, playerName) {
                                 const joinData = await joinRes.json();
                                 if (joinRes.ok) {
                                     storeSession(gameData, joinData.team, joinData.player, code);
-                                    startGame();
+                                    startGame(joinData.team, joinData.player, gameData);
                                 } else {
                                     alert(`Error: ${joinData.error}`);
                                 }
@@ -174,7 +333,7 @@ function showTeamSelection(gameData, code, playerName) {
             const data = await res.json();
             if (res.ok) {
                 storeSession(gameData, data.team, data.player, code);
-                startGame();
+                startGame(data.team, data.player, gameData);
             } else {
                 alert(`Error: ${data.error}`);
             }
