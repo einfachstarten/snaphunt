@@ -1,7 +1,16 @@
+console.log('🔥 app.js EXECUTING - before DOMContentLoaded');
 console.log('📜 app.js loaded');
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('📦 DOMContentLoaded fired');
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('📦 DOMContentLoaded fired');
+        initializeSnaphunt();
+    });
+} else {
+    initializeSnaphunt();
+}
+
+function initializeSnaphunt() {
     console.log('🚀 Snaphunt App Starting...');
 
     try {
@@ -196,5 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
         console.error('❌ Fatal error during initialization:', error);
     }
-});
+}
+
 
