@@ -1,0 +1,49 @@
+:root {
+    --primary-color: #0066ff;
+    --secondary-color: #f0f0f0;
+    --text-color: #333;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: var(--secondary-color);
+    color: var(--text-color);
+}
+
+.screen {
+    padding: 1rem;
+}
+
+.hidden {
+    display: none;
+}
+
+button,
+input {
+    padding: 0.5rem;
+    font-size: 1rem;
+    margin: 0.25rem 0;
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+}
+
+button {
+    background: var(--primary-color);
+    color: #fff;
+    cursor: pointer;
+}
+
+#map {
+    height: 400px;
+}
+
+@media (min-width: 600px) {
+    #map {
+        height: 100vh;
+    }
+}
