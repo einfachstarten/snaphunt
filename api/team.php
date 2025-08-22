@@ -42,9 +42,15 @@ try {
             if (!$game) {
                 send_response(404, ['error' => 'Game not found']);
             }
-            $stmt = $pdo->prepare('SELECT t.id, t.name, t.role, t.join_code, (SELECT COUNT(*) FROM players p WHERE p.team_id = t.id) AS player_count FROM teams t WHERE t.game_id = ?');
+            $stmt = $pdo->prepare('SELECT t.id, t.name, t.role, t.join_code FROM teams t WHERE t.game_id = ?');
             $stmt->execute([$game['id']]);
-            $teams = $stmt->fetchAll();
+            $teams = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($teams as &$team) {
+                $playerStmt = $pdo->prepare('SELECT display_name, is_captain FROM players WHERE team_id = ?');
+                $playerStmt->execute([$team['id']]);
+                $team['players'] = $playerStmt->fetchAll(PDO::FETCH_ASSOC);
+                $team['player_count'] = count($team['players']);
+            }
             send_response(200, ['success' => true, 'teams' => $teams]);
             break;
 
@@ -95,7 +101,7 @@ try {
             send_response(200, [
                 'success' => true,
                 'team' => ['id' => $team_id, 'name' => $team_name, 'role' => $role, 'join_code' => $team_code],
-                'player' => ['id' => $player_id, 'name' => $player_name]
+                'player' => ['id' => $player_id, 'name' => $player_name, 'is_captain' => true]
             ]);
             break;
 
@@ -127,7 +133,7 @@ try {
             send_response(200, [
                 'success' => true,
                 'team' => ['id' => $team['id'], 'name' => $team['name'], 'role' => $team['role'], 'join_code' => $team['join_code']],
-                'player' => ['id' => $player_id, 'name' => $player_name]
+                'player' => ['id' => $player_id, 'name' => $player_name, 'is_captain' => false]
             ]);
             break;
 

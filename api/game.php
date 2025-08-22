@@ -96,6 +96,16 @@ try {
             if (!preg_match('/^[A-Z0-9]{6}$/', $code)) {
                 send_response(400, ['error' => 'Invalid join code']);
             }
+            $input = json_decode(file_get_contents('php://input'), true);
+            $device_id = trim($input['device_id'] ?? '');
+            if ($device_id === '') {
+                send_response(400, ['error' => 'Invalid input']);
+            }
+            $stmt = $pdo->prepare('SELECT g.id FROM games g JOIN teams t ON g.id = t.game_id JOIN players p ON t.id = p.team_id WHERE g.join_code = ? AND p.device_id = ? AND p.is_captain = 1');
+            $stmt->execute([$code, $device_id]);
+            if (!$stmt->fetch()) {
+                send_response(403, ['error' => 'Not authorized']);
+            }
             $stmt = $pdo->prepare('UPDATE games SET status = "active", started_at = NOW() WHERE join_code = ?');
             $stmt->execute([$code]);
             if ($stmt->rowCount() === 0) {
