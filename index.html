@@ -35,49 +35,34 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             onload="console.log('✅ Leaflet script loaded')"
             onerror="console.error('❌ Failed to load Leaflet script', event)"></script>
-    <script src="assets/js/app.js"
-            onload="console.log('✅ app.js loaded')"
-            onerror="console.error('❌ Failed to load app.js', event)"></script>
-
     <script>
-console.log('🚀 Inline script executing!');
+console.log('🚀 Working inline script!');
 setTimeout(() => {
-    console.log('⏱ Executing screen switch...');
     const loading = document.getElementById('loading-screen');
     const join = document.getElementById('join-screen');
     if (loading && join) {
         loading.classList.remove('active');
         join.classList.remove('hidden');
         join.classList.add('active');
-        console.log('✅ Screen switch executed!');
+        console.log('✅ Screen switched!');
+        
         const joinBtn = document.getElementById('join-btn');
         const joinCode = document.getElementById('join-code');
         const playerName = document.getElementById('player-name');
+        
         if (joinBtn && joinCode && playerName) {
-            joinCode.addEventListener('input', (e) => {
-                e.target.value = e.target.value.toUpperCase();
-            });
-            joinBtn.addEventListener('click', async () => {
+            joinCode.oninput = (e) => e.target.value = e.target.value.toUpperCase();
+            joinBtn.onclick = async () => {
                 const code = joinCode.value.trim();
                 const name = playerName.value.trim();
-                if (!code || !name) {
-                    alert('Please enter both join code and name!');
-                    return;
-                }
+                if (!code || !name) return alert('Enter both code and name!');
                 try {
-                    const response = await fetch(`api/game.php?action=get&code=${code}`);
-                    const data = await response.json();
-                    if (response.ok) {
-                        alert(`Found game: ${data.name}! Team selection coming soon.`);
-                    } else {
-                        alert(`Error: ${data.error}`);
-                    }
-                } catch (error) {
-                    alert('Network error!');
-                    console.error(error);
-                }
-            });
-            console.log('✅ Join functionality setup complete!');
+                    const res = await fetch(`api/game.php?action=get&code=${code}`);
+                    const data = await res.json();
+                    alert(res.ok ? `Found: ${data.name}` : `Error: ${data.error}`);
+                } catch(e) { alert('Network error!'); }
+            };
+            console.log('✅ Join setup complete!');
         }
     }
 }, 1000);
