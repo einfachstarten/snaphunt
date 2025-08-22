@@ -22,7 +22,21 @@
         <div id="map"></div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="assets/js/app.js"></script>
+    <!-- Global error handlers -->
+    <script>
+        window.addEventListener('error', function (e) {
+            console.error('Global error:', e.message, 'at', e.filename + ':' + e.lineno + ':' + e.colno);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+            console.error('Unhandled promise rejection:', e.reason);
+        });
+    </script>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            onload="console.log('✅ Leaflet script loaded')"
+            onerror="console.error('❌ Failed to load Leaflet script', event)"></script>
+    <script src="assets/js/app.js" defer
+            onload="console.log('✅ app.js loaded')"
+            onerror="console.error('❌ Failed to load app.js', event)"></script>
 </body>
 </html>
