@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
-    <div id="loading-screen" class="screen active">Loading...</div>
+    <div id="loading-screen" class="screen active"><div class="spinner"></div></div>
 
     <div id="join-screen" class="screen hidden">
         <h1>Join Game</h1>
@@ -25,6 +25,21 @@
         <div id="existing-teams">
             <h3>Existing Teams</h3>
             <div id="teams-list"></div>
+        </div>
+
+        <div id="game-control-section" class="hidden">
+            <div id="captain-controls" class="hidden">
+                <h3>Game Captain Controls</h3>
+                <button id="start-game-btn" class="btn-primary">🚀 Start Game</button>
+                <p class="help-text">Start the game when all teams are ready</p>
+            </div>
+
+            <div id="game-status">
+                <div class="status-card">
+                    <h4>Game Status: <span id="current-status">Waiting for players</span></h4>
+                    <div id="teams-summary"></div>
+                </div>
+            </div>
         </div>
 
         <div id="create-team">
@@ -105,6 +120,16 @@ function storeSession(gameData, teamData, playerData, code) {
     localStorage.setItem('currentGame', JSON.stringify({ code, name: gameData.name }));
     localStorage.setItem('currentTeam', JSON.stringify(teamData));
     localStorage.setItem('currentPlayer', JSON.stringify(playerData));
+}
+
+function showLoading() {
+    const l = document.getElementById('loading-screen');
+    if (l) l.classList.add('active');
+}
+
+function hideLoading() {
+    const l = document.getElementById('loading-screen');
+    if (l) l.classList.remove('active');
 }
 
 const gameState = {
@@ -342,6 +367,74 @@ function startGame(teamData, playerData, gameData) {
             gameState.status = 'finished';
         }
     };
+  }
+
+function setupLobby(teamData, playerData, gameData, code) {
+    const controlSection = document.getElementById('game-control-section');
+    const captainControls = document.getElementById('captain-controls');
+    if (controlSection) controlSection.classList.remove('hidden');
+    if (playerData.is_captain && captainControls) {
+        captainControls.classList.remove('hidden');
+    }
+
+    const startBtn = document.getElementById('start-game-btn');
+    if (startBtn) {
+        startBtn.onclick = async () => {
+            showLoading();
+            try {
+                await fetch(`api/game.php?action=start&code=${code}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: getDeviceId() })
+                });
+            } catch (e) {
+                alert('Network error');
+            } finally {
+                hideLoading();
+            }
+        };
+    }
+
+    async function refreshLobby() {
+        try {
+            const statusRes = await fetch(`api/game.php?action=status&code=${code}`);
+            const statusData = await statusRes.json();
+            if (statusRes.ok) {
+                const statusEl = document.getElementById('current-status');
+                if (statusEl) statusEl.textContent = statusData.status === 'active' ? 'Game started' : 'Waiting for players';
+                if (statusData.status === 'active') {
+                    clearInterval(lobbyTimer);
+                    startGame(teamData, playerData, gameData);
+                    return;
+                }
+            }
+        } catch (e) {}
+
+        try {
+            const teamRes = await fetch(`api/team.php?action=list&game_code=${code}`);
+            const teamDataRes = await teamRes.json();
+            if (teamRes.ok) {
+                const summary = document.getElementById('teams-summary');
+                if (summary) {
+                    summary.innerHTML = '';
+                    teamDataRes.teams.forEach(t => {
+                        const div = document.createElement('div');
+                        div.className = `team-card role-${t.role}`;
+                        const players = t.players.map(p => `${p.display_name}${p.is_captain ? ' 👑' : ''}`).join(', ');
+                        div.innerHTML = `<strong>${t.name}</strong><div>${players}</div>`;
+                        summary.appendChild(div);
+                    });
+                }
+            }
+        } catch (e) {}
+    }
+
+    refreshLobby();
+    const lobbyTimer = setInterval(refreshLobby, 3000);
+
+    const createSection = document.getElementById('create-team');
+    if (createSection) createSection.classList.add('hidden');
+    document.querySelectorAll('#existing-teams button').forEach(btn => btn.disabled = true);
 }
 
 function showTeamSelection(gameData, code, playerName) {
@@ -362,86 +455,94 @@ function showTeamSelection(gameData, code, playerName) {
     gameTitle.textContent = gameData.name;
     const deviceId = getDeviceId();
 
-    async function loadTeams() {
-        teamsList.innerHTML = '';
-        try {
-            const res = await fetch(`api/team.php?action=list&game_code=${code}`);
-            const data = await res.json();
-            if (res.ok) {
-                if (data.teams.length === 0) {
-                    teamsList.textContent = 'No teams yet.';
-                } else {
-                    data.teams.forEach(team => {
-                        const div = document.createElement('div');
-                        div.className = `team-card role-${team.role}`;
-                        div.innerHTML = `
-                            <span class="team-name">${team.name}</span>
-                            <span class="player-count">${team.player_count} players</span>
-                            <button data-code="${team.join_code}">Join</button>
-                        `;
-                        teamsList.appendChild(div);
-                    });
-                    teamsList.querySelectorAll('button').forEach(btn => {
-                        btn.onclick = async () => {
-                            const joinCode = btn.getAttribute('data-code');
-                            try {
-                                const joinRes = await fetch('api/team.php?action=join', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        team_join_code: joinCode,
-                                        player_name: playerName,
+      async function loadTeams() {
+          teamsList.innerHTML = '';
+          try {
+              const res = await fetch(`api/team.php?action=list&game_code=${code}`);
+              const data = await res.json();
+              if (res.ok) {
+                  if (data.teams.length === 0) {
+                      teamsList.textContent = 'No teams yet.';
+                  } else {
+                      data.teams.forEach(team => {
+                          const div = document.createElement('div');
+                          div.className = `team-card role-${team.role}`;
+                          const players = team.players.map(p => `${p.display_name}${p.is_captain ? ' 👑' : ''}`).join(', ');
+                          div.innerHTML = `
+                              <span class="team-name">${team.name}</span>
+                              <span class="player-count">${team.player_count} players</span>
+                              <div class="player-list">${players}</div>
+                              <button data-code="${team.join_code}">Join</button>
+                          `;
+                          teamsList.appendChild(div);
+                      });
+                      teamsList.querySelectorAll('button').forEach(btn => {
+                          btn.onclick = async () => {
+                              const joinCode = btn.getAttribute('data-code');
+                              showLoading();
+                              try {
+                                  const joinRes = await fetch('api/team.php?action=join', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                          team_join_code: joinCode,
+                                          player_name: playerName,
                                         device_id: deviceId
-                                    })
-                                });
-                                const joinData = await joinRes.json();
-                                if (joinRes.ok) {
-                                    storeSession(gameData, joinData.team, joinData.player, code);
-                                    startGame(joinData.team, joinData.player, gameData);
-                                } else {
-                                    alert(`Error: ${joinData.error}`);
-                                }
-                            } catch (e) {
-                                alert('Network error!');
-                            }
-                        };
-                    });
-                }
-            } else {
-                teamsList.textContent = 'Failed to load teams';
-            }
-        } catch (e) {
-            teamsList.textContent = 'Failed to load teams';
-        }
-    }
+                                      })
+                                  });
+                                  const joinData = await joinRes.json();
+                                  if (joinRes.ok) {
+                                      storeSession(gameData, joinData.team, joinData.player, code);
+                                      setupLobby(joinData.team, joinData.player, gameData, code);
+                                  } else {
+                                      alert(`Error: ${joinData.error}`);
+                                  }
+                              } catch (e) {
+                                  alert('Network error!');
+                              } finally {
+                                  hideLoading();
+                              }
+                          };
+                      });
+                  }
+              } else {
+                  teamsList.textContent = 'Failed to load teams';
+              }
+          } catch (e) {
+              teamsList.textContent = 'Failed to load teams';
+          }
+      }
 
-    createBtn.onclick = async () => {
-        const tName = teamName.value.trim();
-        const role = teamRole.value;
-        if (!tName) return alert('Enter team name');
-        try {
-            const res = await fetch('api/team.php?action=create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    game_code: code,
-                    team_name: tName,
-                    role,
-                    player_name: playerName,
-                    device_id: deviceId
-                })
-            });
-            const data = await res.json();
-            if (res.ok) {
-                storeSession(gameData, data.team, data.player, code);
-                startGame(data.team, data.player, gameData);
-            } else {
-                alert(`Error: ${data.error}`);
-            }
-        } catch (e) {
-            alert('Network error!');
-        }
-    };
+      createBtn.onclick = async () => {
+          const tName = teamName.value.trim();
+          const role = teamRole.value;
+          if (!tName) return alert('Enter team name');
+          showLoading();
+          try {
+              const res = await fetch('api/team.php?action=create', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      game_code: code,
+                      team_name: tName,
+                      role,
+                      player_name: playerName,
+                      device_id: deviceId
+                  })
+              });
+              const data = await res.json();
+              if (res.ok) {
+                  storeSession(gameData, data.team, data.player, code);
+                  setupLobby(data.team, data.player, gameData, code);
+              } else {
+                  alert(`Error: ${data.error}`);
+              }
+          } catch (e) {
+              alert('Network error!');
+          } finally {
+              hideLoading();
+          }
+      };
 
     backBtn.onclick = () => {
         teamScreen.classList.add('hidden');
@@ -468,20 +569,21 @@ setTimeout(() => {
 
         if (joinBtn && joinCode && playerName) {
             joinCode.oninput = (e) => e.target.value = e.target.value.toUpperCase();
-            joinBtn.onclick = async () => {
-                const code = joinCode.value.trim();
-                const name = playerName.value.trim();
-                if (!code || !name) return alert('Enter both code and name!');
-                try {
-                    const res = await fetch(`api/game.php?action=get&code=${code}`);
-                    const data = await res.json();
-                    if (res.ok) {
-                        showTeamSelection(data, code, name);
-                    } else {
-                        alert(`Error: ${data.error}`);
-                    }
-                } catch(e) { alert('Network error!'); }
-            };
+              joinBtn.onclick = async () => {
+                  const code = joinCode.value.trim();
+                  const name = playerName.value.trim();
+                  if (!code || !name) return alert('Enter both code and name!');
+                  showLoading();
+                  try {
+                      const res = await fetch(`api/game.php?action=get&code=${code}`);
+                      const data = await res.json();
+                      if (res.ok) {
+                          showTeamSelection(data, code, name);
+                      } else {
+                          alert(`Error: ${data.error}`);
+                      }
+                  } catch(e) { alert('Network error!'); } finally { hideLoading(); }
+              };
             console.log('✅ Join setup complete!');
         }
     }
