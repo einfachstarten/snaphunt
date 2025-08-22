@@ -18,6 +18,28 @@
         <a href="admin.html">Create New Game</a>
     </div>
 
+    <div id="team-screen" class="screen hidden">
+        <h1 id="game-title">Game Name</h1>
+        <h2>Choose Your Team</h2>
+
+        <div id="existing-teams">
+            <h3>Existing Teams</h3>
+            <div id="teams-list"></div>
+        </div>
+
+        <div id="create-team">
+            <h3>Create New Team</h3>
+            <input type="text" id="team-name" placeholder="Team Name" maxlength="50" />
+            <select id="team-role">
+                <option value="hunted">Hunted (Fleeing Team)</option>
+                <option value="hunter">Hunter (Chasing Team)</option>
+            </select>
+            <button id="create-team-btn">Create Team</button>
+        </div>
+
+        <button id="back-to-join">Back to Join</button>
+    </div>
+
     <div id="game-screen" class="screen hidden">
         <div id="map"></div>
     </div>
@@ -37,6 +59,140 @@
             onerror="console.error('❌ Failed to load Leaflet script', event)"></script>
     <script>
 console.log('🚀 Working inline script!');
+
+function getDeviceId() {
+    let id = localStorage.getItem('deviceId');
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('deviceId', id);
+    }
+    return id;
+}
+
+function storeSession(gameData, teamData, playerData, code) {
+    localStorage.setItem('currentGame', JSON.stringify({ code, name: gameData.name }));
+    localStorage.setItem('currentTeam', JSON.stringify(teamData));
+    localStorage.setItem('currentPlayer', JSON.stringify(playerData));
+}
+
+function startGame() {
+    const teamScreen = document.getElementById('team-screen');
+    const gameScreen = document.getElementById('game-screen');
+    teamScreen.classList.add('hidden');
+    teamScreen.classList.remove('active');
+    gameScreen.classList.remove('hidden');
+    gameScreen.classList.add('active');
+}
+
+function showTeamSelection(gameData, code, playerName) {
+    const joinScreen = document.getElementById('join-screen');
+    const teamScreen = document.getElementById('team-screen');
+    const gameTitle = document.getElementById('game-title');
+    const teamsList = document.getElementById('teams-list');
+    const backBtn = document.getElementById('back-to-join');
+    const createBtn = document.getElementById('create-team-btn');
+    const teamName = document.getElementById('team-name');
+    const teamRole = document.getElementById('team-role');
+
+    joinScreen.classList.add('hidden');
+    joinScreen.classList.remove('active');
+    teamScreen.classList.remove('hidden');
+    teamScreen.classList.add('active');
+
+    gameTitle.textContent = gameData.name;
+    const deviceId = getDeviceId();
+
+    async function loadTeams() {
+        teamsList.innerHTML = '';
+        try {
+            const res = await fetch(`api/team.php?action=list&game_code=${code}`);
+            const data = await res.json();
+            if (res.ok) {
+                if (data.teams.length === 0) {
+                    teamsList.textContent = 'No teams yet.';
+                } else {
+                    data.teams.forEach(team => {
+                        const div = document.createElement('div');
+                        div.className = `team-card role-${team.role}`;
+                        div.innerHTML = `
+                            <span class="team-name">${team.name}</span>
+                            <span class="player-count">${team.player_count} players</span>
+                            <button data-code="${team.join_code}">Join</button>
+                        `;
+                        teamsList.appendChild(div);
+                    });
+                    teamsList.querySelectorAll('button').forEach(btn => {
+                        btn.onclick = async () => {
+                            const joinCode = btn.getAttribute('data-code');
+                            try {
+                                const joinRes = await fetch('api/team.php?action=join', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        team_join_code: joinCode,
+                                        player_name: playerName,
+                                        device_id: deviceId
+                                    })
+                                });
+                                const joinData = await joinRes.json();
+                                if (joinRes.ok) {
+                                    storeSession(gameData, joinData.team, joinData.player, code);
+                                    startGame();
+                                } else {
+                                    alert(`Error: ${joinData.error}`);
+                                }
+                            } catch (e) {
+                                alert('Network error!');
+                            }
+                        };
+                    });
+                }
+            } else {
+                teamsList.textContent = 'Failed to load teams';
+            }
+        } catch (e) {
+            teamsList.textContent = 'Failed to load teams';
+        }
+    }
+
+    createBtn.onclick = async () => {
+        const tName = teamName.value.trim();
+        const role = teamRole.value;
+        if (!tName) return alert('Enter team name');
+        try {
+            const res = await fetch('api/team.php?action=create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    game_code: code,
+                    team_name: tName,
+                    role,
+                    player_name: playerName,
+                    device_id: deviceId
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                storeSession(gameData, data.team, data.player, code);
+                startGame();
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (e) {
+            alert('Network error!');
+        }
+    };
+
+    backBtn.onclick = () => {
+        teamScreen.classList.add('hidden');
+        teamScreen.classList.remove('active');
+        joinScreen.classList.remove('hidden');
+        joinScreen.classList.add('active');
+    };
+
+    loadTeams();
+}
+
 setTimeout(() => {
     const loading = document.getElementById('loading-screen');
     const join = document.getElementById('join-screen');
@@ -45,11 +201,11 @@ setTimeout(() => {
         join.classList.remove('hidden');
         join.classList.add('active');
         console.log('✅ Screen switched!');
-        
+
         const joinBtn = document.getElementById('join-btn');
         const joinCode = document.getElementById('join-code');
         const playerName = document.getElementById('player-name');
-        
+
         if (joinBtn && joinCode && playerName) {
             joinCode.oninput = (e) => e.target.value = e.target.value.toUpperCase();
             joinBtn.onclick = async () => {
@@ -59,7 +215,11 @@ setTimeout(() => {
                 try {
                     const res = await fetch(`api/game.php?action=get&code=${code}`);
                     const data = await res.json();
-                    alert(res.ok ? `Found: ${data.name}` : `Error: ${data.error}`);
+                    if (res.ok) {
+                        showTeamSelection(data, code, name);
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
                 } catch(e) { alert('Network error!'); }
             };
             console.log('✅ Join setup complete!');
