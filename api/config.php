@@ -5,10 +5,10 @@ header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 // Database connection constants
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'snaphunt');
-define('DB_USER', 'username');
-define('DB_PASS', 'password');
+define('DB_HOST', 'mysqlsvr84.world4you.com');
+define('DB_NAME', '7951508db1');
+define('DB_USER', 'sql7549177');
+define('DB_PASS', 'jg*ha@di');
 
 // Upload settings
 define('UPLOAD_DIR', __DIR__ . '/../uploads/');
