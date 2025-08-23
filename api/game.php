@@ -96,7 +96,7 @@ try {
             if (!preg_match('/^[A-Z0-9]{6}$/', $code)) {
                 send_response(400, ['error' => 'Invalid join code']);
             }
-            $stmt = $pdo->prepare('UPDATE games SET status = "active" WHERE join_code = ?');
+            $stmt = $pdo->prepare('UPDATE games SET status = "active", started_at = CURRENT_TIMESTAMP WHERE join_code = ?');
             $stmt->execute([$code]);
             if ($stmt->rowCount() === 0) {
                 send_response(404, ['error' => 'Game not found']);
