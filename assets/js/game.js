@@ -354,6 +354,65 @@ class SnaphuntGame {
         // This will be implemented in Ticket 5
     }
 
+    setupRoleSpecificUI() {
+        const roleControls = document.getElementById('role-specific-controls');
+        if (!roleControls) return;
+
+        const roleInfo = document.getElementById('team-role');
+        if (roleInfo) {
+            roleInfo.textContent = this.state.team.role.toUpperCase();
+            roleInfo.className = `role-badge ${this.state.team.role}`;
+        }
+
+        // Clear existing controls
+        roleControls.innerHTML = '';
+
+        if (this.state.team.role === 'hunter') {
+            roleControls.innerHTML = `
+                <div class="hunter-controls">
+                    <h3>🏹 Hunter Controls</h3>
+                    <p>Get within 50m of hunted players to capture them!</p>
+                    <div class="capture-stats">
+                        <span id="capture-count">Captures: 0</span>
+                    </div>
+                </div>
+            `;
+        } else if (this.state.team.role === 'hunted') {
+            roleControls.innerHTML = `
+                <div class="hunted-controls">
+                    <h3>🏃 Hunted Controls</h3>
+                    <p>Avoid hunters and survive as long as possible!</p>
+                    <div class="survival-stats">
+                        <span id="survival-time">Survival: 00:00</span>
+                    </div>
+                </div>
+            `;
+
+            // Start survival timer for hunted players
+            this.startSurvivalTimer();
+        }
+    }
+
+    startSurvivalTimer() {
+        const startTime = Date.now();
+
+        const updateTimer = () => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+
+            const timerEl = document.getElementById('survival-time');
+            if (timerEl) {
+                timerEl.textContent = `Survival: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        };
+
+        // Update immediately and then every second
+        updateTimer();
+        const timerInterval = setInterval(updateTimer, 1000);
+        this.state.intervals.set('survivalTimer', timerInterval);
+    }
+
     startGame() {
         console.log('🎮 Starting game');
 
@@ -362,6 +421,9 @@ class SnaphuntGame {
 
         // Initialize map
         this.initializeMap();
+
+        // Setup role-specific UI
+        this.setupRoleSpecificUI();
 
         // Start location tracking
         this.startLocationTracking();
@@ -372,7 +434,7 @@ class SnaphuntGame {
         // Show game screen
         this.showScreen('game');
 
-        console.log('✅ Game started successfully');
+        console.log(`✅ Game started as ${this.state.team.role}`);
     }
 
     startLocationTracking() {
@@ -591,19 +653,300 @@ class SnaphuntGame {
 
             if (response.ok) {
                 this.updateOtherPlayersMarkers(data.locations);
+
+                // Add proximity detection
+                this.calculateProximities(data.locations);
+
+                // Update UI with online player count
+                this.updateGameStats(data.locations);
             }
         } catch (error) {
             console.warn('Failed to poll game state:', error);
         }
     }
 
+    updateGameStats(locations) {
+        const onlineCount = locations.filter(l => l.latitude && l.longitude).length;
+
+        // Update header if exists
+        const gameTimer = document.getElementById('game-timer');
+        if (gameTimer) {
+            gameTimer.textContent = `Online: ${onlineCount} players`;
+        }
+    }
+
+    calculateProximities(locations) {
+        const ownLocation = locations.find(l => l.id === this.state.player.id);
+        if (!ownLocation || !ownLocation.latitude) return;
+
+        const proximities = locations
+            .filter(l => l.id !== this.state.player.id && l.latitude)
+            .map(target => {
+                const distance = this.calculateDistance(
+                    parseFloat(ownLocation.latitude), parseFloat(ownLocation.longitude),
+                    parseFloat(target.latitude), parseFloat(target.longitude)
+                );
+                return { ...target, distance };
+            })
+            .sort((a, b) => a.distance - b.distance);
+
+        this.updateProximityUI(proximities);
+
+        // Auto-capture logic for hunters
+        if (this.state.team.role === 'hunter') {
+            const capturable = proximities.find(p => p.role === 'hunted' && p.distance <= 50);
+            if (capturable) {
+                this.showCaptureOpportunity(capturable);
+            } else {
+                this.hideCaptureOpportunity();
+            }
+        }
+    }
+
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // Earth radius in meters
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    updateProximityUI(proximities) {
+        // Create proximity panel if it doesn't exist
+        let proximityPanel = document.getElementById('proximity-panel');
+        if (!proximityPanel) {
+            proximityPanel = this.createProximityPanel();
+        }
+
+        // Update proximity list
+        const proximityList = proximityPanel.querySelector('.proximity-list');
+        proximityList.innerHTML = '';
+
+        if (proximities.length === 0) {
+            proximityList.innerHTML = '<p class="no-players">No other players nearby</p>';
+            return;
+        }
+
+        proximities.slice(0, 5).forEach(player => {
+            const item = document.createElement('div');
+            item.className = 'proximity-item';
+
+            const distanceText = player.distance < 1000 
+                ? `${Math.round(player.distance)}m`
+                : `${(player.distance / 1000).toFixed(1)}km`;
+
+            const statusClass = player.distance <= 50 ? 'proximity-close' : 
+                               player.distance <= 200 ? 'proximity-near' : 'proximity-far';
+
+            item.innerHTML = `
+                <div class="player-info">
+                    <span class="player-name">${player.display_name}</span>
+                    <span class="role-badge role-${player.role}">${player.role.toUpperCase()}</span>
+                </div>
+                <div class="distance-info ${statusClass}">
+                    ${distanceText}
+                    ${player.distance <= 50 ? '🎯' : ''}
+                </div>
+            `;
+
+            proximityList.appendChild(item);
+        });
+    }
+
+    createProximityPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'proximity-panel';
+        panel.className = 'proximity-panel';
+        panel.innerHTML = `
+            <div class="proximity-header">
+                <h4>📡 Nearby Players</h4>
+                <button class="toggle-proximity" onclick="this.parentElement.parentElement.classList.toggle('minimized')">_</button>
+            </div>
+            <div class="proximity-list"></div>
+        `;
+
+        // Add to game screen
+        const gameScreen = document.getElementById('game-screen');
+        if (gameScreen) {
+            gameScreen.appendChild(panel);
+        }
+
+        return panel;
+    }
+
+    showCaptureOpportunity(target) {
+        // Prevent spam captures
+        if (this.state.captureTimeout) return;
+
+        let captureAlert = document.getElementById('capture-alert');
+        if (!captureAlert) {
+            captureAlert = this.createCaptureAlert(target);
+        } else {
+            this.updateCaptureAlert(captureAlert, target);
+        }
+    }
+
+    createCaptureAlert(target) {
+        const alert = document.createElement('div');
+        alert.id = 'capture-alert';
+        alert.className = 'capture-alert';
+        alert.innerHTML = `
+            <div class="capture-content">
+                <h3>🎯 Capture Opportunity!</h3>
+                <p>You are within range of <strong>${target.display_name}</strong></p>
+                <p class="distance">Distance: ${Math.round(target.distance)}m</p>
+                <div class="capture-actions">
+                    <button class="btn btn-capture" onclick="snaphuntGame.attemptCapture(${target.id})">
+                        ⚡ CAPTURE
+                    </button>
+                    <button class="btn btn-dismiss" onclick="snaphuntGame.hideCaptureOpportunity()">
+                        Dismiss
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(alert);
+        return alert;
+    }
+
+    updateCaptureAlert(alert, target) {
+        const distanceEl = alert.querySelector('.distance');
+        const captureBtn = alert.querySelector('.btn-capture');
+
+        if (distanceEl) {
+            distanceEl.textContent = `Distance: ${Math.round(target.distance)}m`;
+        }
+
+        if (captureBtn) {
+            captureBtn.onclick = () => this.attemptCapture(target.id);
+        }
+    }
+
+    hideCaptureOpportunity() {
+        const alert = document.getElementById('capture-alert');
+        if (alert) {
+            alert.remove();
+        }
+    }
+
+    async attemptCapture(targetId) {
+        if (!this.state.player || !targetId) return;
+
+        console.log(`🎯 Attempting capture: Hunter ${this.state.player.id} → Target ${targetId}`);
+
+        // Disable capture button temporarily
+        this.state.captureTimeout = setTimeout(() => {
+            delete this.state.captureTimeout;
+        }, 30000); // 30 second cooldown
+
+        const captureBtn = document.querySelector('.btn-capture');
+        if (captureBtn) {
+            captureBtn.disabled = true;
+            captureBtn.textContent = 'Capturing...';
+        }
+
+        try {
+            const response = await fetch('api/game.php?action=capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    hunter_id: this.state.player.id,
+                    target_id: targetId
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                this.showCaptureSuccess(data);
+            } else {
+                this.showCaptureFailure(data.error || 'Capture failed');
+            }
+
+        } catch (error) {
+            console.error('Capture error:', error);
+            this.showCaptureFailure('Network error during capture');
+        } finally {
+            // Re-enable button after delay
+            setTimeout(() => {
+                if (captureBtn) {
+                    captureBtn.disabled = false;
+                    captureBtn.textContent = '⚡ CAPTURE';
+                }
+            }, 2000);
+        }
+    }
+
+    showCaptureSuccess(data) {
+        console.log('✅ Capture successful!', data);
+
+        // Hide capture opportunity
+        this.hideCaptureOpportunity();
+
+        // Show success message
+        this.showCaptureNotification({
+            type: 'success',
+            title: '🎉 Capture Successful!',
+            message: `You captured ${data.target_name} from ${Math.round(data.distance_meters)}m away!`,
+            data: data
+        });
+
+        // Check if game ended
+        if (data.game_ended) {
+            setTimeout(() => {
+                this.showGameEndScreen('hunters_win', data);
+            }, 3000);
+        }
+    }
+
+    showCaptureFailure(error) {
+        console.log('❌ Capture failed:', error);
+
+        this.showCaptureNotification({
+            type: 'error',
+            title: '❌ Capture Failed',
+            message: error,
+            timeout: 5000
+        });
+    }
+
+    showCaptureNotification(options) {
+        // Remove existing notifications
+        document.querySelectorAll('.capture-notification').forEach(n => n.remove());
+
+        const notification = document.createElement('div');
+        notification.className = `capture-notification capture-${options.type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <h4>${options.title}</h4>
+                <p>${options.message}</p>
+                ${options.data && options.data.remaining_hunted !== undefined 
+                    ? `<small>Remaining hunted players: ${options.data.remaining_hunted}</small>` 
+                    : ''}
+            </div>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Auto-remove notification
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, options.timeout || 8000);
+    }
+
     updateOtherPlayersMarkers(locations) {
         locations.forEach(location => {
             if (location.id !== this.state.player.id && location.latitude && location.longitude) {
                 this.updatePlayerMarker(
-                    location.id, 
-                    parseFloat(location.latitude), 
-                    parseFloat(location.longitude), 
+                    location.id,
+                    parseFloat(location.latitude),
+                    parseFloat(location.longitude),
                     location.role
                 );
             }

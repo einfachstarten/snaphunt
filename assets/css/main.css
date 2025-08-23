@@ -161,3 +161,243 @@ input, select {
     }
 }
 
+/* Proximity Panel */
+.proximity-panel {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    min-width: 250px;
+    max-width: 300px;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.proximity-panel.minimized .proximity-list {
+    display: none;
+}
+
+.proximity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.proximity-header h4 {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+.toggle-proximity {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    color: #6b7280;
+}
+
+.proximity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.proximity-item:last-child {
+    border-bottom: none;
+}
+
+.player-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.player-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.distance-info {
+    font-weight: 700;
+    font-size: 0.875rem;
+}
+
+.proximity-close {
+    color: #dc2626;
+    animation: pulse-danger 2s infinite;
+}
+
+.proximity-near {
+    color: #d97706;
+}
+
+.proximity-far {
+    color: #6b7280;
+}
+
+@keyframes pulse-danger {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Capture Alert */
+.capture-alert {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(220, 38, 38, 0.4);
+    text-align: center;
+    z-index: 2000;
+    animation: captureSlideIn 0.3s ease;
+    min-width: 300px;
+}
+
+@keyframes captureSlideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.capture-content h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.5rem;
+}
+
+.capture-content p {
+    margin: 0.5rem 0;
+}
+
+.capture-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+}
+
+.btn-capture {
+    background: white;
+    color: #dc2626;
+    font-weight: 700;
+    font-size: 1.125rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-capture:hover:not(:disabled) {
+    background: #f3f4f6;
+    transform: scale(1.05);
+}
+
+.btn-capture:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.btn-dismiss {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.5);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* Capture Notifications */
+.capture-notification {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 2000;
+    animation: slideInRight 0.3s ease;
+    max-width: 300px;
+}
+
+.capture-success {
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: white;
+}
+
+.capture-error {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    color: white;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Role-specific Controls */
+.hunter-controls, .hunted-controls {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.hunter-controls {
+    border-left: 4px solid #dc2626;
+}
+
+.hunted-controls {
+    border-left: 4px solid #2563eb;
+}
+
+.capture-stats, .survival-stats {
+    margin-top: 0.5rem;
+    font-weight: 600;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .proximity-panel {
+        top: 0.5rem;
+        right: 0.5rem;
+        min-width: 200px;
+        max-width: 250px;
+        padding: 0.75rem;
+    }
+
+    .capture-alert {
+        margin: 1rem;
+        min-width: unset;
+        max-width: calc(100vw - 2rem);
+    }
+
+    .capture-notification {
+        bottom: 1rem;
+        right: 1rem;
+        left: 1rem;
+        max-width: unset;
+    }
+}
+
