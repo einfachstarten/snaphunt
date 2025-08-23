@@ -1,5 +1,13 @@
 class SnaphuntGame {
     constructor() {
+        // Prevent multiple instances
+        if (SnaphuntGame.instance) {
+            console.warn('🚨 SnaphuntGame already exists, returning existing instance');
+            return SnaphuntGame.instance;
+        }
+
+        SnaphuntGame.instance = this;
+
         this.state = {
             game: null,
             team: null,
@@ -8,26 +16,47 @@ class SnaphuntGame {
             markers: new Map(),
             watchId: null,
             intervals: new Map(),
-            status: 'loading'
+            status: 'loading',
+            initialized: false
         };
+
         this.init();
     }
 
+    static getInstance() {
+        if (!SnaphuntGame.instance) {
+            SnaphuntGame.instance = new SnaphuntGame();
+        }
+        return SnaphuntGame.instance;
+    }
+
     init() {
+        if (this.state.initialized) {
+            console.warn('🚨 Game already initialized, skipping');
+            return;
+        }
+
         console.log('🚀 Initializing Snaphunt Game');
+        this.state.initialized = true;
         this.setupEventListeners();
 
-        // Check for existing session before showing join screen
+        // Check for existing session first
         const hasExistingSession = this.checkExistingSession();
 
         this.handleURLHash();
 
-        setTimeout(() => {
-            if (!hasExistingSession) {
-                this.showScreen('join');
-            }
+        // Only show join screen if NO existing session
+        if (!hasExistingSession) {
+            setTimeout(() => {
+                if (this.state.status === 'loading') {
+                    this.showScreen('join');
+                    this.state.status = 'ready';
+                }
+            }, 1000);
+        } else {
+            // Session exists, mark as ready immediately
             this.state.status = 'ready';
-        }, 1000);
+        }
     }
 
     handleURLHash() {
@@ -68,14 +97,30 @@ class SnaphuntGame {
         const playerData = localStorage.getItem('currentPlayer');
 
         if (gameData && teamData && playerData) {
-            console.log('🔄 Resuming existing session');
-            this.state.game = JSON.parse(gameData);
-            this.state.team = JSON.parse(teamData);
-            this.state.player = JSON.parse(playerData);
+            try {
+                console.log('🔄 Resuming existing session');
+                this.state.game = JSON.parse(gameData);
+                this.state.team = JSON.parse(teamData);
+                this.state.player = JSON.parse(playerData);
 
-            // Start game immediately for existing sessions
-            this.startGame();
-            return true;
+                // Validate session data
+                if (!this.state.game.code || !this.state.team.id || !this.state.player.id) {
+                    throw new Error('Invalid session data');
+                }
+
+                // Start game immediately for existing sessions
+                setTimeout(() => {
+                    if (this.state.status !== 'game') {
+                        this.startGame();
+                    }
+                }, 100);
+
+                return true;
+            } catch (error) {
+                console.error('❌ Invalid session data:', error);
+                this.clearSession();
+                return false;
+            }
         }
 
         return false;
@@ -576,12 +621,18 @@ class SnaphuntGame {
     }
 
     startGame() {
+        if (this.state.status === 'game') {
+            console.log('🎮 Game already started, skipping');
+            return;
+        }
+
         console.log('🎮 Starting game');
+        this.state.status = 'game';
 
         // Store game state
-        this.state.game.id = this.state.game.id || Date.now(); // Temporary ID if missing
+        this.state.game.id = this.state.game.id || Date.now();
 
-        // Initialize map
+        // Initialize map (safe initialization)
         this.initializeMap();
 
         // Setup role-specific UI
@@ -678,18 +729,43 @@ class SnaphuntGame {
     initializeMap() {
         console.log('🗺️ Initializing map');
 
-        // Initialize Leaflet map
-        this.state.map = L.map('map').setView([51.505, -0.09], 13);
+        // Check if map already exists and destroy it first
+        if (this.state.map) {
+            console.log('🗺️ Removing existing map');
+            this.state.map.remove();
+            this.state.map = null;
+            this.state.markers.clear();
+        }
 
-        // Add tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(this.state.map);
+        // Ensure map container exists and is empty
+        const mapContainer = document.getElementById('map');
+        if (!mapContainer) {
+            console.error('❌ Map container not found');
+            return;
+        }
 
-        // Set up map controls
-        this.setupMapControls();
+        // Clear any existing map content
+        mapContainer._leaflet_id = null;
 
-        console.log('✅ Map initialized');
+        try {
+            // Initialize Leaflet map
+            this.state.map = L.map('map').setView([51.505, -0.09], 13);
+
+            // Add tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(this.state.map);
+
+            // Set up map controls
+            this.setupMapControls();
+
+            console.log('✅ Map initialized successfully');
+        } catch (error) {
+            console.error('❌ Map initialization failed:', error);
+            // Try to recover by clearing container completely
+            mapContainer.innerHTML = '';
+            mapContainer._leaflet_id = null;
+        }
     }
 
     setupMapControls() {
@@ -1117,16 +1193,18 @@ class SnaphuntGame {
 
     leaveGame() {
         if (confirm('Are you sure you want to leave the game?')) {
+            console.log('🚪 Leaving game...');
+
             // Stop location tracking
             this.stopLocationTracking();
 
-            // Clear all intervals including lobby polling
+            // Clear all intervals
             this.state.intervals.forEach((interval, key) => {
                 clearInterval(interval);
             });
             this.state.intervals.clear();
 
-            // Clear map and markers
+            // Clean up map properly
             if (this.state.map) {
                 this.state.map.remove();
                 this.state.map = null;
@@ -1135,6 +1213,9 @@ class SnaphuntGame {
 
             // Clear session
             this.clearSession();
+
+            // Reset state
+            this.state.status = 'ready';
 
             // Return to join screen
             this.showScreen('join');
@@ -1146,6 +1227,27 @@ class SnaphuntGame {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    window.snaphuntGame = new SnaphuntGame();
+    // Prevent multiple instances
+    if (window.snaphuntGame) {
+        console.warn('🚨 SnaphuntGame already exists, skipping initialization');
+        return;
+    }
+
+    window.snaphuntGame = SnaphuntGame.getInstance();
     console.log('✅ Snaphunt Game initialized');
 });
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initGame);
+} else {
+    initGame();
+}
+
+function initGame() {
+    if (window.snaphuntGame) {
+        console.warn('🚨 SnaphuntGame already exists');
+        return;
+    }
+    window.snaphuntGame = SnaphuntGame.getInstance();
+    console.log('✅ Snaphunt Game initialized');
+}
