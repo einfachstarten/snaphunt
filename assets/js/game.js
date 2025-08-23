@@ -1,12 +1,18 @@
 class SnaphuntGame {
     constructor() {
-        // Prevent multiple instances
+        // Enhanced singleton check with debug info
         if (SnaphuntGame.instance) {
-            console.warn('🚨 SnaphuntGame already exists, returning existing instance');
+            console.warn('🚨 SnaphuntGame DUPLICATE construction attempt!');
+            console.warn('📍 Call stack:', new Error().stack);
+            console.warn('🔄 Returning existing instance');
             return SnaphuntGame.instance;
         }
 
+        console.log('🎬 NEW SnaphuntGame instance created');
+        console.log('📍 Creation call stack:', new Error().stack);
+
         SnaphuntGame.instance = this;
+        SnaphuntGame.createdAt = Date.now();
 
         this.state = {
             game: null,
@@ -17,44 +23,69 @@ class SnaphuntGame {
             watchId: null,
             intervals: new Map(),
             status: 'loading',
-            initialized: false
+            initialized: false,
+            debugId: Math.random().toString(36).substr(2, 9) // Unique ID per instance
         };
 
+        console.log(`🆔 SnaphuntGame instance ID: ${this.state.debugId}`);
         this.init();
     }
 
     static getInstance() {
         if (!SnaphuntGame.instance) {
+            console.log('🏗️ Creating new SnaphuntGame instance via getInstance()');
             SnaphuntGame.instance = new SnaphuntGame();
+        } else {
+            console.log('♻️ Returning existing SnaphuntGame instance');
         }
         return SnaphuntGame.instance;
     }
 
+    static getInstanceInfo() {
+        return {
+            exists: !!SnaphuntGame.instance,
+            createdAt: SnaphuntGame.createdAt,
+            debugId: SnaphuntGame.instance?.state?.debugId || 'none',
+            status: SnaphuntGame.instance?.state?.status || 'none'
+        };
+    }
+
     init() {
+        console.log(`🚀 Initializing Snaphunt Game (ID: ${this.state.debugId})`);
+        console.log('📍 Init call stack:', new Error().stack);
+        
         if (this.state.initialized) {
             console.warn('🚨 Game already initialized, skipping');
+            console.warn(`📊 Current status: ${this.state.status}`);
             return;
         }
 
-        console.log('🚀 Initializing Snaphunt Game');
-        this.state.initialized = true;
+        console.log('🔧 Setting up event listeners...');
         this.setupEventListeners();
-
-        // Check for existing session first
+        
+        console.log('🔍 Checking existing session...');
         const hasExistingSession = this.checkExistingSession();
-
+        console.log(`📋 Session exists: ${hasExistingSession}`);
+        
+        console.log('🔗 Handling URL hash...');
         this.handleURLHash();
-
+        
+        this.state.initialized = true;
+        
         // Only show join screen if NO existing session
         if (!hasExistingSession) {
+            console.log('⏰ Scheduling join screen show in 1s...');
             setTimeout(() => {
                 if (this.state.status === 'loading') {
+                    console.log('✅ Showing join screen (no session found)');
                     this.showScreen('join');
                     this.state.status = 'ready';
+                } else {
+                    console.log(`🚫 NOT showing join screen, status is: ${this.state.status}`);
                 }
             }, 1000);
         } else {
-            // Session exists, mark as ready immediately
+            console.log('✅ Session exists, marking as ready immediately');
             this.state.status = 'ready';
         }
     }
@@ -79,14 +110,27 @@ class SnaphuntGame {
     // Screen Management
     showScreen(screenName) {
         console.log(`📱 Switching to ${screenName} screen`);
+        console.log(`🆔 Instance ID: ${this.state.debugId}`);
+        console.log('📍 showScreen call stack:', new Error().stack);
+        
+        // Additional protection against unwanted join screen switches
+        if (screenName === 'join' && this.state.status === 'game') {
+            console.error('🚨 BLOCKED: Attempt to switch to join screen while in game!');
+            console.error('📍 Blocked call stack:', new Error().stack);
+            return; // BLOCK the switch!
+        }
+        
         document.querySelectorAll('.screen').forEach(screen => {
             screen.classList.remove('active');
             screen.classList.add('hidden');
         });
+        
         const targetScreen = document.getElementById(`${screenName}-screen`);
         if (targetScreen) {
             targetScreen.classList.remove('hidden');
             targetScreen.classList.add('active');
+        } else {
+            console.error(`❌ Screen not found: ${screenName}-screen`);
         }
     }
 
@@ -621,30 +665,34 @@ class SnaphuntGame {
     }
 
     startGame() {
+        console.log(`🎮 startGame() called (Instance ID: ${this.state.debugId})`);
+        console.log('📍 startGame call stack:', new Error().stack);
+        
         if (this.state.status === 'game') {
-            console.log('🎮 Game already started, skipping');
+            console.log('🚫 Game already started, skipping');
+            console.log(`📊 Current game: ${this.state.game?.name || 'unknown'}`);
             return;
         }
 
-        console.log('🎮 Starting game');
+        console.log('🎬 Starting game...');
         this.state.status = 'game';
 
         // Store game state
         this.state.game.id = this.state.game.id || Date.now();
 
-        // Initialize map (safe initialization)
+        console.log('🗺️ Initializing map...');
         this.initializeMap();
 
-        // Setup role-specific UI
+        console.log('🎭 Setting up role-specific UI...');
         this.setupRoleSpecificUI();
 
-        // Start location tracking
+        console.log('📍 Starting location tracking...');
         this.startLocationTracking();
 
-        // Start polling for other players
+        console.log('🔄 Starting game state polling...');
         this.startGameStatePolling();
 
-        // Show game screen
+        console.log('📱 Showing game screen...');
         this.showScreen('game');
 
         console.log(`✅ Game started as ${this.state.team.role}`);
@@ -727,45 +775,59 @@ class SnaphuntGame {
     }
 
     initializeMap() {
-        console.log('🗺️ Initializing map');
-
-        // Check if map already exists and destroy it first
-        if (this.state.map) {
-            console.log('🗺️ Removing existing map');
-            this.state.map.remove();
-            this.state.map = null;
-            this.state.markers.clear();
-        }
-
-        // Ensure map container exists and is empty
+        console.log(`🗺️ Initializing map (Instance ID: ${this.state.debugId})`);
+        
         const mapContainer = document.getElementById('map');
         if (!mapContainer) {
             console.error('❌ Map container not found');
             return;
         }
 
-        // Clear any existing map content
-        mapContainer._leaflet_id = null;
-
-        try {
-            // Initialize Leaflet map
-            this.state.map = L.map('map').setView([51.505, -0.09], 13);
-
-            // Add tile layer
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(this.state.map);
-
-            // Set up map controls
-            this.setupMapControls();
-
-            console.log('✅ Map initialized successfully');
-        } catch (error) {
-            console.error('❌ Map initialization failed:', error);
-            // Try to recover by clearing container completely
-            mapContainer.innerHTML = '';
-            mapContainer._leaflet_id = null;
+        // COMPLETE cleanup of any existing map
+        if (this.state.map) {
+            console.log('🧹 Cleaning up existing map...');
+            try {
+                this.state.map.remove();
+                this.state.map = null;
+            } catch (e) {
+                console.warn('⚠️ Error removing existing map:', e);
+            }
+            this.state.markers.clear();
         }
+
+        // Nuclear cleanup of map container
+        if (mapContainer._leaflet_id) {
+            console.log('☢️ Nuclear cleanup of map container...');
+            delete mapContainer._leaflet_id;
+            mapContainer.innerHTML = '';
+        }
+
+        // Additional safety: wait a bit before reinitializing
+        setTimeout(() => {
+            try {
+                console.log('🏗️ Creating new Leaflet map...');
+                this.state.map = L.map('map').setView([51.505, -0.09], 13);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.state.map);
+
+                this.setupMapControls();
+
+                console.log('✅ Map initialized successfully');
+            } catch (error) {
+                console.error('❌ Map initialization failed:', error);
+                console.error('🗺️ Map container state:', {
+                    hasLeafletId: !!mapContainer._leaflet_id,
+                    innerHTML: mapContainer.innerHTML,
+                    children: mapContainer.children.length
+                });
+                
+                // Try complete reset
+                mapContainer.innerHTML = '';
+                delete mapContainer._leaflet_id;
+            }
+        }, 100);
     }
 
     setupMapControls() {
@@ -1225,29 +1287,62 @@ class SnaphuntGame {
     }
 }
 
-// Initialize when DOM is ready
+window.debugSnaphunt = {
+    getInstanceInfo: () => SnaphuntGame.getInstanceInfo(),
+    getInstance: () => SnaphuntGame.getInstance(),
+    clearInstance: () => {
+        if (SnaphuntGame.instance) {
+            console.log('🗑️ Manually clearing SnaphuntGame instance');
+            SnaphuntGame.instance = null;
+            SnaphuntGame.createdAt = null;
+        }
+    },
+    forceJoin: () => {
+        const game = SnaphuntGame.getInstance();
+        game.showScreen('join');
+    },
+    getState: () => {
+        const game = SnaphuntGame.getInstance();
+        return {
+            status: game.state.status,
+            debugId: game.state.debugId,
+            hasGame: !!game.state.game,
+            hasTeam: !!game.state.team,
+            hasPlayer: !!game.state.player,
+            initialized: game.state.initialized
+        };
+    }
+};
+
+console.log('🔧 Global debug functions available: window.debugSnaphunt');
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Prevent multiple instances
-    if (window.snaphuntGame) {
-        console.warn('🚨 SnaphuntGame already exists, skipping initialization');
+    console.log('📄 DOM Content Loaded event fired');
+    console.log('🔍 Checking for existing SnaphuntGame...');
+    
+    const existingInfo = SnaphuntGame.getInstanceInfo();
+    console.log('📊 Existing instance info:', existingInfo);
+    
+    if (window.snaphuntGame || existingInfo.exists) {
+        console.warn('🚨 SnaphuntGame already exists, skipping DOM ready initialization');
+        console.log('📍 Existing game info:', existingInfo);
         return;
     }
-
+    
+    console.log('🆕 Creating new SnaphuntGame from DOM ready...');
     window.snaphuntGame = SnaphuntGame.getInstance();
-    console.log('✅ Snaphunt Game initialized');
+    console.log('✅ Snaphunt Game initialized from DOM ready');
 });
 
+// Additional safety check for already loaded DOM
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initGame);
+    console.log('📄 DOM still loading, waiting for DOMContentLoaded...');
 } else {
-    initGame();
-}
-
-function initGame() {
-    if (window.snaphuntGame) {
-        console.warn('🚨 SnaphuntGame already exists');
-        return;
+    console.log('📄 DOM already loaded, checking immediate initialization...');
+    if (!window.snaphuntGame && !SnaphuntGame.getInstanceInfo().exists) {
+        console.log('🚀 Immediate initialization (DOM already loaded)');
+        window.snaphuntGame = SnaphuntGame.getInstance();
+    } else {
+        console.log('🚫 Skipping immediate init, game already exists');
     }
-    window.snaphuntGame = SnaphuntGame.getInstance();
-    console.log('✅ Snaphunt Game initialized');
 }
