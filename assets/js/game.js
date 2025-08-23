@@ -16,10 +16,16 @@ class SnaphuntGame {
     init() {
         console.log('🚀 Initializing Snaphunt Game');
         this.setupEventListeners();
-        this.checkExistingSession();
+
+        // Check for existing session before showing join screen
+        const hasExistingSession = this.checkExistingSession();
+
         this.handleURLHash();
+
         setTimeout(() => {
-            this.showScreen('join');
+            if (!hasExistingSession) {
+                this.showScreen('join');
+            }
             this.state.status = 'ready';
         }, 1000);
     }
@@ -60,26 +66,91 @@ class SnaphuntGame {
         const gameData = localStorage.getItem('currentGame');
         const teamData = localStorage.getItem('currentTeam');
         const playerData = localStorage.getItem('currentPlayer');
-        
+
         if (gameData && teamData && playerData) {
             console.log('🔄 Resuming existing session');
             this.state.game = JSON.parse(gameData);
             this.state.team = JSON.parse(teamData);
             this.state.player = JSON.parse(playerData);
+
+            // Start game immediately for existing sessions
             this.startGame();
+            return true;
+        }
+
+        return false;
+    }
+
+    validateSession() {
+        // Validate that session data is still valid
+        if (!this.state.game || !this.state.team || !this.state.player) {
+            console.warn('⚠️ Invalid session data detected, clearing session');
+            this.clearSession();
+            return false;
+        }
+
+        // Check if game still exists on server
+        if (this.state.game.code) {
+            this.validateGameExists();
+        }
+
+        return true;
+    }
+
+    async validateGameExists() {
+        try {
+            const response = await fetch(`api/game.php?action=get&code=${this.state.game.code}`);
+            if (!response.ok) {
+                console.warn('⚠️ Game no longer exists, clearing session');
+                this.clearSession();
+                this.showScreen('join');
+            }
+        } catch (error) {
+            console.warn('Could not validate game existence:', error);
         }
     }
 
     storeSession(gameData, teamData, playerData) {
-        localStorage.setItem('currentGame', JSON.stringify(gameData));
-        localStorage.setItem('currentTeam', JSON.stringify(teamData));
-        localStorage.setItem('currentPlayer', JSON.stringify(playerData));
+        if (!gameData || !teamData || !playerData) {
+            console.error('Cannot store invalid session data');
+            return;
+        }
+
+        try {
+            localStorage.setItem('currentGame', JSON.stringify(gameData));
+            localStorage.setItem('currentTeam', JSON.stringify(teamData));
+            localStorage.setItem('currentPlayer', JSON.stringify(playerData));
+            console.log('✅ Session stored successfully');
+        } catch (error) {
+            console.error('Failed to store session:', error);
+        }
     }
 
     clearSession() {
-        localStorage.removeItem('currentGame');
-        localStorage.removeItem('currentTeam');
-        localStorage.removeItem('currentPlayer');
+        try {
+            localStorage.removeItem('currentGame');
+            localStorage.removeItem('currentTeam');
+            localStorage.removeItem('currentPlayer');
+            console.log('🗑️ Session cleared');
+
+            // Reset state
+            this.state.game = null;
+            this.state.team = null;
+            this.state.player = null;
+        } catch (error) {
+            console.error('Error clearing session:', error);
+        }
+    }
+
+    debugSession() {
+        console.group('🔍 Session Debug Info');
+        console.log('Game State:', this.state.game);
+        console.log('Team State:', this.state.team);
+        console.log('Player State:', this.state.player);
+        console.log('LocalStorage Game:', localStorage.getItem('currentGame'));
+        console.log('LocalStorage Team:', localStorage.getItem('currentTeam'));
+        console.log('LocalStorage Player:', localStorage.getItem('currentPlayer'));
+        console.groupEnd();
     }
 
     // Device ID Management
