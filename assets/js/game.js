@@ -355,15 +355,286 @@ class SnaphuntGame {
     }
 
     startGame() {
-        console.log('🎮 Starting game - to be implemented in next tickets');
-        // This will be implemented in Ticket 5
+        console.log('🎮 Starting game');
+
+        // Store game state
+        this.state.game.id = this.state.game.id || Date.now(); // Temporary ID if missing
+
+        // Initialize map
+        this.initializeMap();
+
+        // Start location tracking
+        this.startLocationTracking();
+
+        // Start polling for other players
+        this.startGameStatePolling();
+
+        // Show game screen
+        this.showScreen('game');
+
+        console.log('✅ Game started successfully');
+    }
+
+    startLocationTracking() {
+        console.log('📍 Starting location tracking');
+
+        if (!navigator.geolocation) {
+            this.showError('Geolocation not supported on this device');
+            return;
+        }
+
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 30000
+        };
+
+        this.state.watchId = navigator.geolocation.watchPosition(
+            (position) => this.handleLocationUpdate(position),
+            (error) => this.handleLocationError(error),
+            options
+        );
+
+        console.log('✅ Location tracking started');
+    }
+
+    async handleLocationUpdate(position) {
+        if (!this.state.player) return;
+
+        const { latitude, longitude } = position.coords;
+
+        console.log(`📍 Location update: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+
+        // Update own marker on map
+        this.updatePlayerMarker(this.state.player.id, latitude, longitude, 'own');
+
+        // Send location to server
+        try {
+            await fetch('api/location.php?action=update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    player_id: this.state.player.id,
+                    latitude,
+                    longitude
+                })
+            });
+        } catch (error) {
+            console.warn('Failed to update location:', error);
+        }
+    }
+
+    handleLocationError(error) {
+        console.error('Location error:', error);
+
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                this.showError('Location access denied. Please enable location sharing to play.');
+                break;
+            case error.POSITION_UNAVAILABLE:
+                this.showError('Location information unavailable.');
+                break;
+            case error.TIMEOUT:
+                this.showError('Location request timed out.');
+                break;
+            default:
+                this.showError('An unknown location error occurred.');
+                break;
+        }
+    }
+
+    stopLocationTracking() {
+        if (this.state.watchId) {
+            navigator.geolocation.clearWatch(this.state.watchId);
+            this.state.watchId = null;
+            console.log('📍 Location tracking stopped');
+        }
+    }
+
+    initializeMap() {
+        console.log('🗺️ Initializing map');
+
+        // Initialize Leaflet map
+        this.state.map = L.map('map').setView([51.505, -0.09], 13);
+
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(this.state.map);
+
+        // Set up map controls
+        this.setupMapControls();
+
+        console.log('✅ Map initialized');
+    }
+
+    setupMapControls() {
+        // Add custom control buttons
+        const centerBtn = document.getElementById('center-map');
+        const fullscreenBtn = document.getElementById('toggle-fullscreen');
+
+        if (centerBtn) {
+            centerBtn.onclick = () => this.centerMapOnPlayer();
+        }
+
+        if (fullscreenBtn) {
+            fullscreenBtn.onclick = () => this.toggleMapFullscreen();
+        }
+    }
+
+    centerMapOnPlayer() {
+        const ownMarker = this.state.markers.get(`player_${this.state.player.id}`);
+        if (ownMarker && this.state.map) {
+            this.state.map.setView(ownMarker.getLatLng(), 16);
+            console.log('🎯 Map centered on player');
+        }
+    }
+
+    toggleMapFullscreen() {
+        const mapContainer = document.getElementById('map-container');
+
+        if (mapContainer.classList.contains('fullscreen')) {
+            mapContainer.classList.remove('fullscreen');
+            document.exitFullscreen?.();
+        } else {
+            mapContainer.classList.add('fullscreen');
+            mapContainer.requestFullscreen?.();
+        }
+
+        // Refresh map size after fullscreen change
+        setTimeout(() => {
+            if (this.state.map) {
+                this.state.map.invalidateSize();
+            }
+        }, 100);
+    }
+
+    updatePlayerMarker(playerId, lat, lng, type) {
+        const key = `player_${playerId}`;
+
+        if (this.state.markers.has(key)) {
+            // Update existing marker
+            this.state.markers.get(key).setLatLng([lat, lng]);
+        } else {
+            // Create new marker
+            const marker = L.marker([lat, lng], {
+                icon: this.createMarkerIcon(type, playerId === this.state.player.id)
+            }).addTo(this.state.map);
+
+            // Add popup with player info
+            marker.bindPopup(`Player: ${this.getPlayerName(playerId)}<br>Role: ${type}`);
+            this.state.markers.set(key, marker);
+        }
+
+        // Auto-center on own player initially
+        if (type === 'own' && this.state.markers.size === 1) {
+            this.state.map.setView([lat, lng], 16);
+        }
+    }
+
+    createMarkerIcon(type, isOwn = false) {
+        const colors = {
+            'own': '#4CAF50',
+            'hunter': '#FF5722', 
+            'hunted': '#2196F3'
+        };
+
+        const size = isOwn ? 24 : 20;
+        const borderWidth = isOwn ? 4 : 2;
+
+        return L.divIcon({
+            className: `player-marker player-marker-${type}`,
+            html: `<div style="
+            background-color: ${colors[type]}; 
+            width: ${size}px; 
+            height: ${size}px; 
+            border-radius: 50%; 
+            border: ${borderWidth}px solid white; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            ${isOwn ? 'box-shadow: 0 0 0 3px rgba(76,175,80,0.3);' : ''}
+        "></div>`,
+            iconSize: [size + borderWidth * 2, size + borderWidth * 2],
+            iconAnchor: [(size + borderWidth * 2) / 2, (size + borderWidth * 2) / 2]
+        });
+    }
+
+    getPlayerName(playerId) {
+        // Helper method to get player name by ID
+        // This will be expanded when we have full player data
+        if (playerId === this.state.player.id) {
+            return this.state.player.name;
+        }
+        return `Player ${playerId}`;
+    }
+
+    startGameStatePolling() {
+        // Clear any existing interval
+        if (this.state.intervals.has('gameState')) {
+            clearInterval(this.state.intervals.get('gameState'));
+        }
+
+        // Poll every 5 seconds
+        const interval = setInterval(() => {
+            this.pollGameState();
+        }, 5000);
+
+        this.state.intervals.set('gameState', interval);
+        console.log('🔄 Game state polling started');
+    }
+
+    async pollGameState() {
+        if (!this.state.game || !this.state.game.id) return;
+
+        try {
+            const response = await fetch(`api/location.php?action=get&game_id=${this.state.game.id}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                this.updateOtherPlayersMarkers(data.locations);
+            }
+        } catch (error) {
+            console.warn('Failed to poll game state:', error);
+        }
+    }
+
+    updateOtherPlayersMarkers(locations) {
+        locations.forEach(location => {
+            if (location.id !== this.state.player.id && location.latitude && location.longitude) {
+                this.updatePlayerMarker(
+                    location.id, 
+                    parseFloat(location.latitude), 
+                    parseFloat(location.longitude), 
+                    location.role
+                );
+            }
+        });
     }
 
     leaveGame() {
         if (confirm('Are you sure you want to leave the game?')) {
+            // Stop location tracking
+            this.stopLocationTracking();
+
+            // Clear all intervals
+            this.state.intervals.forEach((interval, key) => {
+                clearInterval(interval);
+            });
+            this.state.intervals.clear();
+
+            // Clear map and markers
+            if (this.state.map) {
+                this.state.map.remove();
+                this.state.map = null;
+            }
+            this.state.markers.clear();
+
+            // Clear session
             this.clearSession();
+
+            // Return to join screen
             this.showScreen('join');
-            console.log('👋 Left game');
+
+            console.log('👋 Left game and cleaned up resources');
         }
     }
 }
