@@ -331,6 +331,47 @@ try {
             </div>
         </div>
 
+        <!-- Demo Game Status -->
+        <div class="card">
+            <div class="card-header">🎮 Demo Game Status</div>
+            <div class="card-content">
+                <?php
+                try {
+                    $stmt = $pdo->prepare('SELECT * FROM games WHERE join_code = "DEMO01"');
+                    $stmt->execute();
+                    $demo_game = $stmt->fetch();
+
+                    if ($demo_game) {
+                        echo "<div class='info-box' style='margin-bottom: 1rem;'>";
+                        echo "<strong>Status:</strong> " . strtoupper($demo_game['status']) . "<br>";
+                        echo "<strong>Join Code:</strong> DEMO01<br>";
+                        echo "<strong>Direct Link:</strong> <a href='index.html#DEMO01' target='_blank'>Join Demo Game</a>";
+                        echo "</div>";
+
+                        // Get bot count
+                        $stmt = $pdo->prepare('SELECT COUNT(*) as bot_count FROM players p JOIN teams t ON p.team_id = t.id WHERE t.game_id = ? AND p.device_id LIKE "bot_%"');
+                        $stmt->execute([$demo_game['id']]);
+                        $bot_info = $stmt->fetch();
+
+                        echo "<p><strong>Bot Players:</strong> {$bot_info['bot_count']} active</p>";
+
+                        // Get recent captures
+                        $stmt = $pdo->prepare('SELECT COUNT(*) as capture_count FROM captures WHERE game_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)');
+                        $stmt->execute([$demo_game['id']]);
+                        $captures = $stmt->fetch();
+
+                        echo "<p><strong>Recent Captures:</strong> {$captures['capture_count']} in last hour</p>";
+
+                    } else {
+                        echo "<p>Demo game not found. <a href='launch_demo.php'>Setup Demo Game</a></p>";
+                    }
+                } catch (Exception $e) {
+                    echo "<p>Error loading demo game status.</p>";
+                }
+                ?>
+            </div>
+        </div>
+
         <!-- System Info -->
         <div class="card">
             <div class="card-header">🔧 System Status</div>

@@ -93,6 +93,21 @@ if (isset($_POST['action']) && $db_connected && $is_authenticated) {
                 $error = "Delete confirmation failed. Please type 'DELETE' to confirm.";
             }
             break;
+
+        case 'toggle_bot_simulation':
+            $game_id = (int)$_POST['game_id'];
+            $action_type = $_POST['bot_action'];
+
+            if ($action_type === 'start') {
+                // Start bot simulation in background
+                $command = "php " . __DIR__ . "/bot_simulation.php > /dev/null 2>&1 &";
+                exec($command);
+                $message = "Bot simulation started in background!";
+            } else {
+                // Stopping bots would require tracking process IDs
+                $message = "Bot simulation stop requested (manual process termination required)";
+            }
+            break;
     }
 }
 ?>
@@ -206,9 +221,11 @@ if (isset($_POST['action']) && $db_connected && $is_authenticated) {
                     <input type="hidden" name="game_id" value="<?php echo $game['id']; ?>">
                     <button type="submit" class="btn btn-primary">📍 Add Test Locations</button>
                 </form>
-                
+
+                <button class="btn btn-warning" onclick="toggleBotSimulation(<?php echo $game['id']; ?>, 'start')">🤖 Start Bots</button>
+
                 <button class="btn btn-danger" onclick="confirmDeleteGame(<?php echo $game['id']; ?>, '<?php echo htmlspecialchars($game['name'], ENT_QUOTES); ?>')">🗑️ Delete</button>
-                
+
                 <a href="index.html#<?php echo $game['join_code']; ?>" target="_blank" class="btn btn-primary">🔗 Join Game</a>
             </div>
         </div>
@@ -302,6 +319,22 @@ if (isset($_POST['action']) && $db_connected && $is_authenticated) {
 </form>
 
 <script>
+function toggleBotSimulation(gameId, action) {
+    if (action === 'start') {
+        if (confirm('Start bot simulation for this game? Bots will move and perform captures automatically.')) {
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.innerHTML = `
+                <input type="hidden" name="action" value="toggle_bot_simulation">
+                <input type="hidden" name="game_id" value="${gameId}">
+                <input type="hidden" name="bot_action" value="${action}">
+            `;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+}
+
 function confirmDeleteGame(gameId, gameName) {
     const confirmation = prompt(
         `⚠️ WARNING: This will permanently delete "${gameName}" and ALL associated data!\n\n` +
