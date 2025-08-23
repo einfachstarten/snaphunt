@@ -20,7 +20,7 @@ try {
     }
     
     // Create demo game
-    $stmt = $pdo->prepare('INSERT INTO games (name, join_code, status, photo_interval_seconds) VALUES (?, ?, "active", 120)');
+    $stmt = $pdo->prepare('INSERT INTO games (name, join_code, status, photo_interval_seconds, started_at) VALUES (?, ?, "active", 120, CURRENT_TIMESTAMP)');
     $stmt->execute([$demo_name, $demo_code]);
     $game_id = $pdo->lastInsertId();
     

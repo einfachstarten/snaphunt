@@ -17,10 +17,41 @@ class SnaphuntGame {
         console.log('🚀 Initializing Snaphunt Game');
         this.setupEventListeners();
         this.checkExistingSession();
+        this.checkUrlHash(); // Auto-fill join code from URL hash
         setTimeout(() => {
             this.showScreen('join');
             this.state.status = 'ready';
         }, 1000);
+    }
+
+    checkUrlHash() {
+        // Check if URL contains a game code hash (e.g., #DEMO01)
+        const hash = window.location.hash.replace('#', '');
+        if (hash && hash.match(/^[A-Z0-9]{6}$/)) {
+            console.log(`🔗 Auto-filling join code from URL: ${hash}`);
+
+            // Auto-fill the join code input
+            const joinCodeInput = document.getElementById('join-code');
+            if (joinCodeInput) {
+                joinCodeInput.value = hash;
+            }
+
+            // If we have a stored player name, auto-join
+            const storedName = localStorage.getItem('lastPlayerName');
+            if (storedName) {
+                const playerNameInput = document.getElementById('player-name');
+                if (playerNameInput) {
+                    playerNameInput.value = storedName;
+                }
+
+                // Optional: Auto-join after 1 second delay
+                setTimeout(() => {
+                    if (confirm(`Auto-join game ${hash} as ${storedName}?`)) {
+                        this.joinGame(hash, storedName);
+                    }
+                }, 1000);
+            }
+        }
     }
 
     // Screen Management
@@ -136,6 +167,9 @@ class SnaphuntGame {
 
     // API Calls
     async joinGame(code, playerName) {
+        // Store player name for future auto-fill
+        localStorage.setItem('lastPlayerName', playerName);
+
         this.showLoading();
         try {
             const response = await fetch(`api/game.php?action=get&code=${code}`);
@@ -348,10 +382,102 @@ class SnaphuntGame {
         return div;
     }
 
-    // Placeholder methods for future tickets
-    setupLobby() {
-        console.log('🏁 Setting up lobby - to be implemented in next tickets');
-        // This will be implemented in Ticket 5
+    // Lobby Management
+    async setupLobby() {
+        console.log('🏁 Setting up lobby');
+
+        // Store game data
+        this.state.game.id = this.state.game.id || Date.now();
+
+        // Check if game is already active - if so, go straight to game
+        try {
+            const response = await fetch(`api/game.php?action=status&code=${this.state.game.code}`);
+            const data = await response.json();
+
+            if (data.success && data.status === 'active') {
+                console.log('🚀 Game is already active! Starting game directly...');
+                // Skip lobby, go straight to game
+                this.startGame();
+                return;
+            }
+        } catch (error) {
+            console.warn('Failed to check initial game status:', error);
+        }
+
+        // Show lobby interface for waiting games
+        this.showLobbyScreen();
+
+        // Start polling for game status changes
+        this.startLobbyPolling();
+    }
+
+    startLobbyPolling() {
+        // Clear any existing lobby polling
+        if (this.state.intervals.has('lobbyPoll')) {
+            clearInterval(this.state.intervals.get('lobbyPoll'));
+        }
+
+        // Poll every 5 seconds
+        const interval = setInterval(() => this.checkGameStatus(), 5000);
+        this.state.intervals.set('lobbyPoll', interval);
+    }
+
+    async checkGameStatus() {
+        if (!this.state.game || !this.state.game.code) return;
+
+        try {
+            const response = await fetch(`api/game.php?action=status&code=${this.state.game.code}`);
+            const data = await response.json();
+
+            console.log(`🔄 Game status check: ${data.status}`);
+
+            if (data.success && data.status === 'active') {
+                console.log('🚀 Game started! Transitioning to game screen...');
+
+                // Stop lobby polling
+                if (this.state.intervals.has('lobbyPoll')) {
+                    clearInterval(this.state.intervals.get('lobbyPoll'));
+                    this.state.intervals.delete('lobbyPoll');
+                }
+
+                // Start the actual game
+                this.startGame();
+            }
+        } catch (error) {
+            console.warn('Failed to check game status:', error);
+        }
+    }
+
+    showLobbyScreen() {
+        console.log('🏟️ Showing lobby screen');
+
+        // Update UI to show lobby state
+        const gameTitle = document.getElementById('game-title');
+        if (gameTitle) {
+            gameTitle.textContent = `${this.state.game.name} - Waiting to Start`;
+        }
+
+        // Show game control section
+        const gameControlSection = document.getElementById('game-control-section');
+        if (gameControlSection) {
+            gameControlSection.classList.remove('hidden');
+        }
+
+        // Add lobby status message
+        const existingTeams = document.getElementById('existing-teams');
+        if (existingTeams) {
+            let statusMsg = existingTeams.querySelector('.lobby-status');
+            if (!statusMsg) {
+                statusMsg = document.createElement('div');
+                statusMsg.className = 'lobby-status';
+                statusMsg.style.cssText = 'background: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; border-radius: 6px; margin: 1rem 0; text-align: center;';
+                existingTeams.appendChild(statusMsg);
+            }
+            statusMsg.innerHTML = '⏳ <strong>Game is waiting to start...</strong><br><small>The game will begin automatically when started by any player</small>';
+        }
+
+        // Refresh teams display
+        this.loadTeams(this.state.game.code);
     }
 
     setupRoleSpecificUI() {
