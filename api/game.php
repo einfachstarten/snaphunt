@@ -197,6 +197,179 @@ try {
             ]);
             break;
 
+        case 'capture':
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                send_response(400, ['error' => 'Invalid request method']);
+            }
+
+            $input = json_decode(file_get_contents('php://input'), true);
+            $hunter_id = (int)($input['hunter_id'] ?? 0);
+            $target_id = (int)($input['target_id'] ?? 0);
+
+            if (!$hunter_id || !$target_id) {
+                send_response(400, ['error' => 'Invalid hunter_id or target_id']);
+            }
+
+            // Verify capture conditions: roles, proximity, and game state
+            $stmt = $pdo->prepare('
+                SELECT 
+                    h.id as hunter_id,
+                    h.display_name as hunter_name,
+                    ht.id as hunter_team_id,
+                    ht.role as hunter_role,
+                    ht.game_id,
+                    t.id as target_id,
+                    t.display_name as target_name,
+                    tt.id as target_team_id,
+                    tt.role as target_role,
+                    hlp.latitude as hunter_lat,
+                    hlp.longitude as hunter_lng,
+                    tlp.latitude as target_lat,
+                    tlp.longitude as target_lng,
+                    g.status as game_status,
+                    (6371000 * acos(
+                        cos(radians(hlp.latitude)) * cos(radians(tlp.latitude)) *
+                        cos(radians(tlp.longitude) - radians(hlp.longitude)) +
+                        sin(radians(hlp.latitude)) * sin(radians(tlp.latitude))
+                    )) as distance_meters
+                FROM players h
+                JOIN teams ht ON h.team_id = ht.id
+                JOIN games g ON ht.game_id = g.id
+                JOIN location_pings hlp ON h.id = hlp.player_id
+                JOIN players t ON t.id = ?
+                JOIN teams tt ON t.team_id = tt.id
+                JOIN location_pings tlp ON t.id = tlp.player_id
+                WHERE h.id = ? 
+                AND ht.role = "hunter" 
+                AND tt.role = "hunted"
+                AND ht.game_id = tt.game_id
+                AND g.status = "active"
+                AND hlp.created_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+                AND tlp.created_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+                HAVING distance_meters <= 50
+            ');
+            $stmt->execute([$target_id, $hunter_id]);
+            $capture_data = $stmt->fetch();
+
+            if (!$capture_data) {
+                send_response(400, ['error' => 'Capture not valid - check proximity, roles, or game status']);
+            }
+
+            // Check if target was already captured recently (prevent spam)
+            $stmt = $pdo->prepare('
+                SELECT id FROM captures 
+                WHERE hunted_player_id = ? 
+                AND created_at > DATE_SUB(NOW(), INTERVAL 30 SECOND)
+            ');
+            $stmt->execute([$target_id]);
+            if ($stmt->fetch()) {
+                send_response(409, ['error' => 'Target already captured recently']);
+            }
+
+            // Record the capture
+            $stmt = $pdo->prepare('
+                INSERT INTO captures (game_id, hunter_player_id, hunted_player_id, distance_meters) 
+                VALUES (?, ?, ?, ?)
+            ');
+            $stmt->execute([
+                $capture_data['game_id'],
+                $hunter_id,
+                $target_id,
+                round($capture_data['distance_meters'])
+            ]);
+            $capture_id = $pdo->lastInsertId();
+
+            // Log capture event
+            $stmt = $pdo->prepare('
+                INSERT INTO game_events (game_id, team_id, player_id, event_type, event_data) 
+                VALUES (?, ?, ?, "capture", ?)
+            ');
+            $stmt->execute([
+                $capture_data['game_id'],
+                $capture_data['hunter_team_id'],
+                $hunter_id,
+                json_encode([
+                    'target_player_id' => $target_id,
+                    'target_player_name' => $capture_data['target_name'],
+                    'distance_meters' => round($capture_data['distance_meters']),
+                    'capture_id' => $capture_id
+                ])
+            ]);
+
+            // Check if game should end (all hunted players captured)
+            $stmt = $pdo->prepare('
+                SELECT COUNT(*) as remaining_hunted
+                FROM players p
+                JOIN teams t ON p.team_id = t.id
+                WHERE t.game_id = ? 
+                AND t.role = "hunted"
+                AND p.id NOT IN (
+                    SELECT DISTINCT hunted_player_id 
+                    FROM captures 
+                    WHERE game_id = ?
+                )
+            ');
+            $stmt->execute([$capture_data['game_id'], $capture_data['game_id']]);
+            $remaining = $stmt->fetch();
+
+            $game_ended = false;
+            if ($remaining['remaining_hunted'] == 0) {
+                // End game - hunters win
+                $stmt = $pdo->prepare('
+                    UPDATE games 
+                    SET status = "finished", ended_at = CURRENT_TIMESTAMP, winner_team_id = ?
+                    WHERE id = ?
+                ');
+                $stmt->execute([$capture_data['hunter_team_id'], $capture_data['game_id']]);
+                $game_ended = true;
+            }
+
+            send_response(200, [
+                'success' => true,
+                'capture_confirmed' => true,
+                'capture_id' => $capture_id,
+                'distance_meters' => round($capture_data['distance_meters']),
+                'hunter_name' => $capture_data['hunter_name'],
+                'target_name' => $capture_data['target_name'],
+                'game_ended' => $game_ended,
+                'remaining_hunted' => $remaining['remaining_hunted']
+            ]);
+            break;
+
+        case 'captures':
+            $game_id = (int)($_GET['game_id'] ?? 0);
+
+            if (!$game_id) {
+                send_response(400, ['error' => 'Invalid game_id']);
+            }
+
+            // Get all captures for the game
+            $stmt = $pdo->prepare('
+                SELECT 
+                    c.id,
+                    c.distance_meters,
+                    c.created_at,
+                    hp.display_name as hunter_name,
+                    ht.name as hunter_team,
+                    tp.display_name as target_name,
+                    tt.name as target_team
+                FROM captures c
+                JOIN players hp ON c.hunter_player_id = hp.id
+                JOIN teams ht ON hp.team_id = ht.id
+                JOIN players tp ON c.hunted_player_id = tp.id  
+                JOIN teams tt ON tp.team_id = tt.id
+                WHERE c.game_id = ?
+                ORDER BY c.created_at DESC
+            ');
+            $stmt->execute([$game_id]);
+            $captures = $stmt->fetchAll();
+
+            send_response(200, [
+                'success' => true,
+                'captures' => $captures
+            ]);
+            break;
+
         default:
             send_response(400, ['error' => 'Invalid action']);
     }
