@@ -112,19 +112,19 @@ class SnaphuntGame {
         console.log(`📱 Switching to ${screenName} screen`);
         console.log(`🆔 Instance ID: ${this.state.debugId}`);
         console.log('📍 showScreen call stack:', new Error().stack);
-        
+
         // Additional protection against unwanted join screen switches
         if (screenName === 'join' && this.state.status === 'game') {
             console.error('🚨 BLOCKED: Attempt to switch to join screen while in game!');
             console.error('📍 Blocked call stack:', new Error().stack);
-            return; // BLOCK the switch!
+            return;
         }
-        
+
         document.querySelectorAll('.screen').forEach(screen => {
             screen.classList.remove('active');
             screen.classList.add('hidden');
         });
-        
+
         const targetScreen = document.getElementById(`${screenName}-screen`);
         if (targetScreen) {
             targetScreen.classList.remove('hidden');
@@ -133,12 +133,32 @@ class SnaphuntGame {
             console.error(`❌ Screen not found: ${screenName}-screen`);
         }
 
-        // If switching to game screen, refresh map size
-        if (screenName === 'game' && this.state.map) {
+        // CRITICAL: If switching to game screen, ensure map is properly sized
+        if (screenName === 'game') {
+            console.log('🗺️ Game screen shown, checking map...');
+
             setTimeout(() => {
-                console.log('🗺️ Refreshing map size after screen change...');
-                this.state.map.invalidateSize();
-            }, 100);
+                const mapEl = document.getElementById('map');
+                if (mapEl && this.state.map) {
+                    console.log('🔧 Ensuring map dimensions after screen change...');
+
+                    // Force dimensions if needed
+                    if (mapEl.offsetWidth === 0 || mapEl.offsetHeight === 0) {
+                        console.log('⚠️ Map has no dimensions, forcing size...');
+                        mapEl.style.width = '100%';
+                        mapEl.style.height = '400px';
+                        mapEl.style.minHeight = '400px';
+                    }
+
+                    // Always invalidate size after screen change
+                    this.state.map.invalidateSize(true);
+                    console.log('🔄 Map size invalidated after screen transition');
+
+                    // Log final dimensions for debugging
+                    const rect = mapEl.getBoundingClientRect();
+                    console.log(`📐 Map final dimensions: ${rect.width}x${rect.height}`);
+                }
+            }, 200); // Wait for screen transition animation
         }
     }
 
@@ -1072,50 +1092,108 @@ class SnaphuntGame {
             mapContainer.innerHTML = '';
         }
 
-        // Wait for screen transition to complete, then initialize map
+        // CRITICAL: Force explicit dimensions on map element
+        console.log('🔧 Setting explicit map dimensions...');
+        mapContainer.style.width = '100%';
+        mapContainer.style.height = '100%';
+        mapContainer.style.minHeight = '400px';
+        mapContainer.style.display = 'block';
+        mapContainer.style.position = 'relative';
+
+        // Wait for dimensions to be applied
         setTimeout(() => {
+            // Double-check dimensions before initializing
+            const containerRect = mapContainer.getBoundingClientRect();
+            console.log(`📐 Map container dimensions: ${containerRect.width}x${containerRect.height}`);
+
+            if (containerRect.width === 0 || containerRect.height === 0) {
+                console.error('❌ Map container still has no dimensions after CSS fix');
+                console.error('🔧 Forcing emergency dimensions...');
+
+                // Emergency fallback dimensions
+                mapContainer.style.width = '100%';
+                mapContainer.style.height = '400px';
+                mapContainer.style.minHeight = '400px';
+            }
+
             try {
-                console.log('🏗️ Creating new Leaflet map...');
-                
-                // Ensure container has dimensions
-                if (mapContainer.offsetWidth === 0 || mapContainer.offsetHeight === 0) {
-                    console.warn('⚠️ Map container has no dimensions, forcing size...');
-                    mapContainer.style.width = '100%';
-                    mapContainer.style.height = '400px';
-                }
-                
-                this.state.map = L.map('map').setView([48.2082, 16.3738], 13); // Vienna center
+                console.log('🏗️ Creating Leaflet map...');
+
+                this.state.map = L.map('map', {
+                    // Leaflet options for better initialization
+                    preferCanvas: true,
+                    zoomControl: true
+                }).setView([48.2082, 16.3738], 13); // Vienna center
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
                 }).addTo(this.state.map);
 
-                // Force map to recognize its size
-                setTimeout(() => {
-                    if (this.state.map) {
-                        this.state.map.invalidateSize();
-                        console.log('🔄 Map size invalidated for proper display');
-                    }
-                }, 100);
+                // Critical: Force map to recognize its size immediately
+                this.state.map.invalidateSize(true);
 
+                console.log('🎮 Setting up map controls...');
                 this.setupMapControls();
 
+                // Additional size check after a moment
+                setTimeout(() => {
+                    if (this.state.map) {
+                        console.log('🔄 Final map size invalidation...');
+                        this.state.map.invalidateSize(true);
+
+                        // Log final map state
+                        const mapSize = this.state.map.getSize();
+                        console.log(`📏 Final map size: ${mapSize.x}x${mapSize.y}`);
+                    }
+                }, 500);
+
                 console.log('✅ Map initialized successfully');
+
             } catch (error) {
                 console.error('❌ Map initialization failed:', error);
-                console.error('🗺️ Map container state:', {
-                    hasLeafletId: !!mapContainer._leaflet_id,
-                    offsetWidth: mapContainer.offsetWidth,
-                    offsetHeight: mapContainer.offsetHeight,
-                    innerHTML: mapContainer.innerHTML,
-                    children: mapContainer.children.length
+                console.error('📊 Debug info:', {
+                    containerWidth: mapContainer.offsetWidth,
+                    containerHeight: mapContainer.offsetHeight,
+                    containerDisplay: getComputedStyle(mapContainer).display,
+                    containerPosition: getComputedStyle(mapContainer).position,
+                    hasLeafletId: !!mapContainer._leaflet_id
                 });
-                
-                // Try complete reset
-                mapContainer.innerHTML = '';
-                delete mapContainer._leaflet_id;
+
+                // Last resort recovery attempt
+                this.emergencyMapFix(mapContainer);
             }
-        }, 200); // Wait 200ms for screen transition
+        }, 300); // Wait 300ms for CSS to be applied
+    }
+
+    emergencyMapFix(mapContainer) {
+        console.log('🚨 Attempting emergency map fix...');
+
+        // Clear everything and force dimensions
+        mapContainer.innerHTML = '';
+        delete mapContainer._leaflet_id;
+
+        // Force dimensions with !important via style
+        mapContainer.style.cssText = `
+            width: 100% !important;
+            height: 400px !important;
+            min-height: 400px !important;
+            display: block !important;
+            position: relative !important;
+            background: #e5e7eb !important;
+        `;
+
+        setTimeout(() => {
+            try {
+                this.state.map = L.map('map').setView([48.2082, 16.3738], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.state.map);
+                this.state.map.invalidateSize(true);
+                this.setupMapControls();
+                console.log('✅ Emergency map fix successful');
+            } catch (error) {
+                console.error('❌ Emergency map fix failed:', error);
+            }
+        }, 200);
     }
 
     setupMapControls() {
@@ -1588,6 +1666,65 @@ class SnaphuntGame {
         });
     }
 
+    debugMapDimensions() {
+        const mapEl = document.getElementById('map');
+        const containerEl = document.getElementById('map-container');
+
+        console.group('🗺️ Map Dimensions Debug');
+        if (mapEl) {
+            const mapRect = mapEl.getBoundingClientRect();
+            const mapStyles = getComputedStyle(mapEl);
+            console.log('Map Element:', {
+                offsetWidth: mapEl.offsetWidth,
+                offsetHeight: mapEl.offsetHeight,
+                boundingRect: `${mapRect.width}x${mapRect.height}`,
+                computedWidth: mapStyles.width,
+                computedHeight: mapStyles.height,
+                display: mapStyles.display,
+                position: mapStyles.position
+            });
+        }
+
+        if (containerEl) {
+            const containerRect = containerEl.getBoundingClientRect();
+            const containerStyles = getComputedStyle(containerEl);
+            console.log('Container Element:', {
+                offsetWidth: containerEl.offsetWidth,
+                offsetHeight: containerEl.offsetHeight,
+                boundingRect: `${containerRect.width}x${containerRect.height}`,
+                computedWidth: containerStyles.width,
+                computedHeight: containerStyles.height,
+                display: containerStyles.display,
+                flex: containerStyles.flex
+            });
+        }
+
+        if (this.state.map) {
+            const mapSize = this.state.map.getSize();
+            console.log('Leaflet Map Size:', `${mapSize.x}x${mapSize.y}`);
+        }
+
+        console.groupEnd();
+    }
+
+    forceMapVisible() {
+        console.log('🔧 Force making map visible...');
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+            mapEl.style.width = '100%';
+            mapEl.style.height = '400px';
+            mapEl.style.minHeight = '400px';
+            mapEl.style.display = 'block';
+
+            if (this.state.map) {
+                this.state.map.invalidateSize(true);
+            }
+
+            console.log('✅ Map forced visible');
+            this.debugMapDimensions();
+        }
+    }
+
     leaveGame() {
         if (confirm('Are you sure you want to leave the game?')) {
             console.log('🚪 Leaving game...');
@@ -1646,6 +1783,14 @@ window.debugSnaphunt = {
             hasPlayer: !!game.state.player,
             initialized: game.state.initialized
         };
+    },
+    debugMap: () => {
+        const game = SnaphuntGame.getInstance();
+        game.debugMapDimensions();
+    },
+    forceMapVisible: () => {
+        const game = SnaphuntGame.getInstance();
+        game.forceMapVisible();
     }
 };
 
