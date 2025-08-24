@@ -469,6 +469,29 @@ class SnaphuntGame {
         }, 3000);
     }
 
+    showMessage(message, type = 'info') {
+        // Remove existing messages
+        document.querySelectorAll('.message-success, .message-error').forEach(msg => msg.remove());
+        
+        // Create new message
+        const messageEl = document.createElement('div');
+        messageEl.className = `message-${type}`;
+        messageEl.textContent = message;
+        
+        // Add to bot controls area
+        const botControls = document.querySelector('.bot-test-controls');
+        if (botControls) {
+            botControls.appendChild(messageEl);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                if (messageEl.parentNode) {
+                    messageEl.remove();
+                }
+            }, 3000);
+        }
+    }
+
     // Team Selection Screen
     showTeamSelection(gameData, code, playerName) {
         this.tempGameData = { ...gameData, code };
@@ -635,7 +658,24 @@ class SnaphuntGame {
                         <span id="capture-count">Captures: 0</span>
                     </div>
                 </div>
+                
+                <!-- NEW: Bot Test Controls -->
+                <div class="bot-test-controls">
+                    <h3>🤖 Bot Testing</h3>
+                    <div class="bot-controls">
+                        <button id="create-test-bot" class="btn btn-secondary">Create Test Bot</button>
+                        <button id="toggle-bot-visibility" class="btn btn-secondary">Hide Bots</button>
+                        <button id="remove-test-bots" class="btn btn-danger">Remove All Bots</button>
+                    </div>
+                    <div class="bot-status">
+                        <span id="bot-count">Test Bots: 0</span>
+                        <span id="bot-movement-status">Movement: Stopped</span>
+                    </div>
+                </div>
             `;
+
+            // Setup bot control event listeners
+            this.setupBotControls();
         } else if (this.state.team.role === 'hunted') {
             roleControls.innerHTML = `
                 <div class="hunted-controls">
@@ -670,6 +710,228 @@ class SnaphuntGame {
         updateTimer();
         const timerInterval = setInterval(updateTimer, 1000);
         this.state.intervals.set('survivalTimer', timerInterval);
+    }
+
+    // New method for bot controls:
+    setupBotControls() {
+        const createBotBtn = document.getElementById('create-test-bot');
+        const toggleVisibilityBtn = document.getElementById('toggle-bot-visibility');
+        const removeBotBtn = document.getElementById('remove-test-bots');
+
+        this.state.botControls = {
+            botsVisible: true,
+            movementActive: false,
+            movementInterval: null
+        };
+
+        if (createBotBtn) {
+            createBotBtn.onclick = () => this.createTestBot();
+        }
+
+        if (toggleVisibilityBtn) {
+            toggleVisibilityBtn.onclick = () => this.toggleBotVisibility();
+        }
+
+        if (removeBotBtn) {
+            removeBotBtn.onclick = () => this.removeTestBots();
+        }
+
+        // Start bot movement polling
+        this.startBotMovement();
+    }
+
+    async createTestBot() {
+        if (!this.state.game || !this.state.game.code) return;
+
+        // Get user's current position for bot placement
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            
+            try {
+                const response = await fetch('api/test_bot.php?action=create_test_bot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_code: this.state.game.code,
+                        center_lat: latitude,
+                        center_lng: longitude,
+                        max_radius_m: 500
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    console.log('✅ Test bot created:', data.bot);
+                    this.showMessage(`Bot "${data.bot.name}" created nearby!`, 'success');
+                    this.updateBotCounter();
+                } else {
+                    this.showError(data.error || 'Failed to create test bot');
+                }
+            } catch (error) {
+                this.showError('Network error creating test bot');
+                console.error('Create test bot error:', error);
+            }
+        }, () => {
+            // Fallback to default coordinates if geolocation fails
+            this.createTestBotAt(48.4366, 15.5809);
+        });
+    }
+
+    async createTestBotAt(lat, lng) {
+        try {
+            const response = await fetch('api/test_bot.php?action=create_test_bot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    game_code: this.state.game.code,
+                    center_lat: lat,
+                    center_lng: lng,
+                    max_radius_m: 500
+                })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                console.log('✅ Test bot created at fallback location:', data.bot);
+                this.showMessage(`Bot "${data.bot.name}" created!`, 'success');
+                this.updateBotCounter();
+            } else {
+                this.showError(data.error || 'Failed to create test bot');
+            }
+        } catch (error) {
+            this.showError('Network error creating test bot');
+            console.error('Create test bot error:', error);
+        }
+    }
+
+    toggleBotVisibility() {
+        this.state.botControls.botsVisible = !this.state.botControls.botsVisible;
+        const toggleBtn = document.getElementById('toggle-bot-visibility');
+        
+        // Toggle bot marker visibility
+        this.state.markers.forEach((marker, key) => {
+            if (key.startsWith('player_') && this.isTestBot(key)) {
+                if (this.state.botControls.botsVisible) {
+                    marker.addTo(this.state.map);
+                } else {
+                    this.state.map.removeLayer(marker);
+                }
+            }
+        });
+
+        if (toggleBtn) {
+            toggleBtn.textContent = this.state.botControls.botsVisible ? 'Hide Bots' : 'Show Bots';
+        }
+
+        console.log(`🤖 Bots ${this.state.botControls.botsVisible ? 'shown' : 'hidden'}`);
+    }
+
+    async removeTestBots() {
+        if (!confirm('Remove all test bots from this game?')) return;
+
+        try {
+            const response = await fetch('api/test_bot.php?action=remove_test_bots', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    game_code: this.state.game.code
+                })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                console.log('✅ Test bots removed');
+                this.showMessage('All test bots removed!', 'success');
+                
+                // Remove bot markers from map
+                this.state.markers.forEach((marker, key) => {
+                    if (key.startsWith('player_') && this.isTestBot(key)) {
+                        this.state.map.removeLayer(marker);
+                        this.state.markers.delete(key);
+                    }
+                });
+
+                this.updateBotCounter();
+            } else {
+                this.showError(data.error || 'Failed to remove test bots');
+            }
+        } catch (error) {
+            this.showError('Network error removing test bots');
+            console.error('Remove test bots error:', error);
+        }
+    }
+
+    startBotMovement() {
+        if (this.state.botControls?.movementInterval) return;
+
+        this.state.botControls.movementActive = true;
+        
+        const moveBots = async () => {
+            if (!this.state.game?.code) return;
+
+            // Get user's position for bot movement center
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const { latitude, longitude } = position.coords;
+                
+                try {
+                    const response = await fetch('api/test_bot.php?action=move_bots', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            game_code: this.state.game.code,
+                            center_lat: latitude,
+                            center_lng: longitude,
+                            max_radius_m: 500
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (response.ok && data.updated_bots) {
+                        // Update bot markers on map
+                        data.updated_bots.forEach(bot => {
+                            this.updatePlayerMarker(bot.id, bot.latitude, bot.longitude, 'test_bot');
+                        });
+                    }
+                } catch (error) {
+                    console.warn('Bot movement error:', error);
+                }
+            }, () => {
+                // Fallback movement with default center
+                console.warn('Using fallback coordinates for bot movement');
+            });
+        };
+
+        // Move bots every 5 seconds
+        this.state.botControls.movementInterval = setInterval(moveBots, 5000);
+        
+        // Update status
+        const statusEl = document.getElementById('bot-movement-status');
+        if (statusEl) {
+            statusEl.textContent = 'Movement: Active';
+        }
+
+        console.log('🤖 Bot movement started');
+    }
+
+    updateBotCounter() {
+        // Count test bot markers
+        let botCount = 0;
+        this.state.markers.forEach((marker, key) => {
+            if (key.startsWith('player_') && this.isTestBot(key)) {
+                botCount++;
+            }
+        });
+
+        const counterEl = document.getElementById('bot-count');
+        if (counterEl) {
+            counterEl.textContent = `Test Bots: ${botCount}`;
+        }
+    }
+
+    isTestBot(markerKey) {
+        // Check if this is a test bot marker (simplified check)
+        // In practice, you'd store bot IDs or check against bot player data
+        return markerKey.includes('test_bot') || this.state.testBotIds?.includes(markerKey);
     }
 
     startGame() {
@@ -905,23 +1167,51 @@ class SnaphuntGame {
 
     updatePlayerMarker(playerId, lat, lng, type) {
         const key = `player_${playerId}`;
+        const isOwnPlayer = playerId === this.state.player.id;
+        const isTestBot = type === 'test_bot' || (type && type.includes('bot'));
 
         if (this.state.markers.has(key)) {
             // Update existing marker
             this.state.markers.get(key).setLatLng([lat, lng]);
         } else {
-            // Create new marker
+            // Create new marker with appropriate icon
+            let markerType = type;
+            if (isTestBot) {
+                markerType = 'test_bot';
+            } else if (isOwnPlayer) {
+                markerType = 'own';
+            }
+
             const marker = L.marker([lat, lng], {
-                icon: this.createMarkerIcon(type, playerId === this.state.player.id)
+                icon: this.createMarkerIcon(markerType, isOwnPlayer)
             }).addTo(this.state.map);
 
-            // Add popup with player info
-            marker.bindPopup(`Player: ${this.getPlayerName(playerId)}<br>Role: ${type}`);
+            // Add popup with player/bot info
+            const popupContent = isTestBot 
+                ? `Test Bot: ${this.getBotName(playerId)}<br>Role: AI Hunted`
+                : `Player: ${this.getPlayerName(playerId)}<br>Role: ${type}`;
+            
+            marker.bindPopup(popupContent);
+            
+            // Store marker
             this.state.markers.set(key, marker);
+
+            // Track test bot IDs
+            if (isTestBot) {
+                this.state.testBotIds = this.state.testBotIds || [];
+                if (!this.state.testBotIds.includes(key)) {
+                    this.state.testBotIds.push(key);
+                }
+            }
+        }
+
+        // Handle bot visibility
+        if (isTestBot && !this.state.botControls?.botsVisible) {
+            this.state.map.removeLayer(this.state.markers.get(key));
         }
 
         // Auto-center on own player initially
-        if (type === 'own' && this.state.markers.size === 1) {
+        if (isOwnPlayer && this.state.markers.size === 1) {
             this.state.map.setView([lat, lng], 16);
         }
     }
@@ -930,12 +1220,17 @@ class SnaphuntGame {
         const colors = {
             'own': '#4CAF50',
             'hunter': '#FF5722', 
-            'hunted': '#2196F3'
+            'hunted': '#2196F3',
+            'test_bot': '#9C27B0'  // Purple for test bots
         };
 
         const size = isOwn ? 24 : 20;
         const borderWidth = isOwn ? 4 : 2;
 
+        // Special styling for test bots
+        const isBot = type === 'test_bot';
+        const botAnimation = isBot ? 'animation: pulse 2s infinite;' : '';
+        
         return L.divIcon({
             className: `player-marker player-marker-${type}`,
             html: `<div style="
@@ -946,7 +1241,10 @@ class SnaphuntGame {
             border: ${borderWidth}px solid white; 
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             ${isOwn ? 'box-shadow: 0 0 0 3px rgba(76,175,80,0.3);' : ''}
-        "></div>`,
+            ${botAnimation}
+        ">
+        ${isBot ? '🤖' : ''}
+        </div>`,
             iconSize: [size + borderWidth * 2, size + borderWidth * 2],
             iconAnchor: [(size + borderWidth * 2) / 2, (size + borderWidth * 2) / 2]
         });
@@ -959,6 +1257,11 @@ class SnaphuntGame {
             return this.state.player.name;
         }
         return `Player ${playerId}`;
+    }
+
+    getBotName(playerId) {
+        // Helper to get bot name by ID (you'd enhance this with actual bot data)
+        return `Bot ${playerId}`;
     }
 
     startGameStatePolling() {
