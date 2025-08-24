@@ -4,8 +4,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Snaphunt</title>
-    <link rel="stylesheet" href="assets/css/main.css" />
+    
+    <!-- Cache Control Headers -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
+    <!-- CSS with Cache Busting -->
+    <link rel="stylesheet" href="assets/css/main.css?v=20250824_1110" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Emergency cache buster - remove after proper implementation -->
+    <script>
+    // Emergency cache buster - remove after proper implementation
+    (function() {
+        const timestamp = Date.now();
+        
+        // Update CSS
+        const cssLink = document.querySelector('link[href*="main.css"]');
+        if (cssLink && !cssLink.href.includes('?v=')) {
+            cssLink.href += '?v=' + timestamp;
+        }
+        
+        // Update JS when it loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const jsScript = document.querySelector('script[src*="game.js"]');
+            if (jsScript && !jsScript.src.includes('?v=')) {
+                const newScript = document.createElement('script');
+                newScript.src = jsScript.src + '?v=' + timestamp;
+                jsScript.parentNode.replaceChild(newScript, jsScript);
+            }
+        });
+        
+        console.log('🔄 Emergency cache busting applied:', timestamp);
+    })();
+    </script>
 </head>
 <body>
     <div id="loading-screen" class="screen active"><div class="spinner"></div></div>
@@ -91,6 +124,6 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="assets/js/game.js"></script>
+    <script src="assets/js/game.js?v=20250824_1110"></script>
 </body>
 </html>
