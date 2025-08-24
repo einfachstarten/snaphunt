@@ -132,6 +132,14 @@ class SnaphuntGame {
         } else {
             console.error(`❌ Screen not found: ${screenName}-screen`);
         }
+
+        // If switching to game screen, refresh map size
+        if (screenName === 'game' && this.state.map) {
+            setTimeout(() => {
+                console.log('🗺️ Refreshing map size after screen change...');
+                this.state.map.invalidateSize();
+            }, 100);
+        }
     }
 
     // Session Management
@@ -776,14 +784,14 @@ class SnaphuntGame {
 
     initializeMap() {
         console.log(`🗺️ Initializing map (Instance ID: ${this.state.debugId})`);
-        
+
         const mapContainer = document.getElementById('map');
         if (!mapContainer) {
             console.error('❌ Map container not found');
             return;
         }
 
-        // COMPLETE cleanup of any existing map
+        // Complete cleanup of any existing map
         if (this.state.map) {
             console.log('🧹 Cleaning up existing map...');
             try {
@@ -802,15 +810,31 @@ class SnaphuntGame {
             mapContainer.innerHTML = '';
         }
 
-        // Additional safety: wait a bit before reinitializing
+        // Wait for screen transition to complete, then initialize map
         setTimeout(() => {
             try {
                 console.log('🏗️ Creating new Leaflet map...');
-                this.state.map = L.map('map').setView([51.505, -0.09], 13);
+                
+                // Ensure container has dimensions
+                if (mapContainer.offsetWidth === 0 || mapContainer.offsetHeight === 0) {
+                    console.warn('⚠️ Map container has no dimensions, forcing size...');
+                    mapContainer.style.width = '100%';
+                    mapContainer.style.height = '400px';
+                }
+                
+                this.state.map = L.map('map').setView([48.2082, 16.3738], 13); // Vienna center
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap contributors'
                 }).addTo(this.state.map);
+
+                // Force map to recognize its size
+                setTimeout(() => {
+                    if (this.state.map) {
+                        this.state.map.invalidateSize();
+                        console.log('🔄 Map size invalidated for proper display');
+                    }
+                }, 100);
 
                 this.setupMapControls();
 
@@ -819,6 +843,8 @@ class SnaphuntGame {
                 console.error('❌ Map initialization failed:', error);
                 console.error('🗺️ Map container state:', {
                     hasLeafletId: !!mapContainer._leaflet_id,
+                    offsetWidth: mapContainer.offsetWidth,
+                    offsetHeight: mapContainer.offsetHeight,
                     innerHTML: mapContainer.innerHTML,
                     children: mapContainer.children.length
                 });
@@ -827,11 +853,10 @@ class SnaphuntGame {
                 mapContainer.innerHTML = '';
                 delete mapContainer._leaflet_id;
             }
-        }, 100);
+        }, 200); // Wait 200ms for screen transition
     }
 
     setupMapControls() {
-        // Add custom control buttons
         const centerBtn = document.getElementById('center-map');
         const fullscreenBtn = document.getElementById('toggle-fullscreen');
 
@@ -842,6 +867,8 @@ class SnaphuntGame {
         if (fullscreenBtn) {
             fullscreenBtn.onclick = () => this.toggleMapFullscreen();
         }
+
+        console.log('🎮 Map controls setup complete');
     }
 
     centerMapOnPlayer() {
@@ -849,6 +876,8 @@ class SnaphuntGame {
         if (ownMarker && this.state.map) {
             this.state.map.setView(ownMarker.getLatLng(), 16);
             console.log('🎯 Map centered on player');
+        } else {
+            console.warn('⚠️ Cannot center map: no own marker found');
         }
     }
 
@@ -858,17 +887,20 @@ class SnaphuntGame {
         if (mapContainer.classList.contains('fullscreen')) {
             mapContainer.classList.remove('fullscreen');
             document.exitFullscreen?.();
+            console.log('🔄 Exited map fullscreen');
         } else {
             mapContainer.classList.add('fullscreen');
             mapContainer.requestFullscreen?.();
+            console.log('🔄 Entered map fullscreen');
         }
 
         // Refresh map size after fullscreen change
         setTimeout(() => {
             if (this.state.map) {
                 this.state.map.invalidateSize();
+                console.log('🔄 Map size refreshed after fullscreen toggle');
             }
-        }, 100);
+        }, 200);
     }
 
     updatePlayerMarker(playerId, lat, lng, type) {

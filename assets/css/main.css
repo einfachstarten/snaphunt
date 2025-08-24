@@ -76,17 +76,91 @@ input, select {
     padding: 2rem;
 }
 
-/* Map Container Styles */
+/* Game Screen Layout */
+#game-screen {
+    max-width: none;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#game-header {
+    background: #1e293b;
+    color: white;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#game-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+#game-name {
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+.role-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.role-badge.hunter {
+    background: #dc2626;
+    color: white;
+}
+
+.role-badge.hunted {
+    background: #2563eb;
+    color: white;
+}
+
+#game-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+}
+
+#game-main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
 #map-container {
+    flex: 2;
     position: relative;
-    width: 100%;
-    height: 100%;
+    min-height: 400px;
+    background: #e5e7eb;
+    border-radius: 8px;
+    margin: 1rem;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 #map {
-    width: 100%;
-    height: 100%;
+    width: 100% !important;
+    height: 100% !important;
     border-radius: 8px;
+    background: #e5e7eb;
 }
 
 #map-controls {
@@ -100,16 +174,78 @@ input, select {
 
 #map-controls button {
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
 }
 
 #map-controls button:hover {
-    background: #f5f5f5;
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+
+#game-controls {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    background: white;
+    border-left: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+#leave-game {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    margin: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+#leave-game:hover {
+    background: #b91c1c;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    #game-main {
+        flex-direction: column;
+    }
+    
+    #map-container {
+        flex: 1;
+        min-height: 300px;
+        margin: 0.5rem;
+    }
+    
+    #game-controls {
+        flex: none;
+        border-left: none;
+        border-top: 1px solid #e5e7eb;
+        max-height: 200px;
+    }
+    
+    #game-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+    
+    #game-status {
+        align-items: center;
+        flex-direction: row;
+        gap: 1rem;
+    }
 }
 
 /* Fullscreen Map */
@@ -120,7 +256,8 @@ input, select {
     width: 100vw !important;
     height: 100vh !important;
     z-index: 9999 !important;
-    background: white;
+    margin: 0 !important;
+    border-radius: 0 !important;
 }
 
 #map-container.fullscreen #map {
@@ -145,19 +282,6 @@ input, select {
     }
     100% {
         box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
-    }
-}
-
-/* Mobile Responsive */
-@media (max-width: 768px) {
-    #map-controls {
-        top: 5px;
-        right: 5px;
-    }
-    
-    #map-controls button {
-        padding: 0.4rem;
-        font-size: 0.75rem;
     }
 }
 
