@@ -617,3 +617,96 @@ input, select {
     border: 1px solid #bfdbfe;
 }
 
+.bot-test-controls {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.bot-test-controls h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+    color: #374151;
+}
+
+.bot-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.bot-controls button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+    border-color: #6b7280;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+    border-color: #4b5563;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+}
+
+.bot-status {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+@keyframes pulse {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% { 
+        transform: scale(1.1);
+        opacity: 0.7;
+    }
+}
+
+.player-marker-test_bot {
+    animation: pulse 2s infinite;
+}
+
+.message-success {
+    background: #dcfce7;
+    color: #166534;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #bbf7d0;
+    margin: 0.5rem 0;
+}
+
+.message-error {
+    background: #fef2f2;
+    color: #dc2626;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #fecaca;
+    margin: 0.5rem 0;
+}
+
