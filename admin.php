@@ -331,8 +331,6 @@ if (isset($_GET['logout'])) {
 <script>
 async function adminAction(action, data = {}) {
     try {
-        console.log(`🔄 Admin action: ${action}`, data);
-
         const formData = new FormData();
         formData.append('action', action);
 
@@ -345,8 +343,6 @@ async function adminAction(action, data = {}) {
             body: formData
         });
 
-        console.log(`📡 Response status: ${response.status}`);
-
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -354,82 +350,81 @@ async function adminAction(action, data = {}) {
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             const text = await response.text();
-            console.error('❌ Non-JSON response:', text.substring(0, 500));
-            throw new Error('Server returned non-JSON response');
+            console.error('Non-JSON response received:', text.substring(0, 200));
+            throw new Error('Server returned invalid response format');
         }
 
         const result = await response.json();
-        console.log(`✅ Admin action result:`, result);
 
         if (result.success) {
-            showAlert(result.message || 'Action completed successfully', 'success');
+            if (result.message) {
+                showAlert(result.message, 'success');
+            }
         } else {
             showAlert(result.error || 'Action failed', 'error');
         }
 
-        if (action !== 'get_live_stats') {
+        // Only refresh stats after non-stat actions
+        if (action !== 'get_live_stats' && result.success) {
             setTimeout(() => refreshStats(), 1000);
         }
 
         return result;
 
     } catch (error) {
-        console.error('❌ Admin action failed:', error);
-        showAlert(`Network error: ${error.message}`, 'error');
+        console.error('Admin action failed:', error);
+        showAlert(`Error: ${error.message}`, 'error');
         return { success: false, error: error.message };
     }
 }
 
 let refreshStatsRunning = false;
+let autoRefreshInterval = null;
 
 async function refreshStats() {
     if (refreshStatsRunning) {
-        console.warn('⚠️ RefreshStats already running, skipping');
         return;
     }
 
     refreshStatsRunning = true;
 
     try {
-        console.log('📊 Refreshing admin stats...');
         const result = await adminAction('get_live_stats');
 
-        if (result.success) {
-            const demo = result.demo_stats;
-            const system = result.system_stats;
+        if (result && result.success) {
+            const demo = result.demo_stats || {};
+            const system = result.system_stats || {};
 
-            console.log('📈 Stats updated:', { demo, system });
-
+            // Update UI elements safely
             const statusEl = document.getElementById('demo-status');
             const playersEl = document.getElementById('demo-players');
             const botsEl = document.getElementById('demo-bots');
             const onlineEl = document.getElementById('online-players');
 
-            if (statusEl) statusEl.textContent = (demo?.status || 'unknown').toUpperCase();
-            if (playersEl) playersEl.textContent = demo?.total_players || '0';
-            if (botsEl) botsEl.textContent = demo?.bot_players || '0';
-            if (onlineEl) onlineEl.textContent = demo?.online_players || '0';
-
-            const timestampEl = document.querySelector('.live-indicator');
-            if (timestampEl && system?.timestamp) {
-                timestampEl.title = `Last updated: ${system.timestamp}`;
-            }
+            if (statusEl) statusEl.textContent = (demo.status || 'unknown').toUpperCase();
+            if (playersEl) playersEl.textContent = demo.total_players || '0';
+            if (botsEl) botsEl.textContent = demo.bot_players || '0';
+            if (onlineEl) onlineEl.textContent = demo.online_players || '0';
 
         } else {
-            console.error('❌ Stats refresh failed:', result.error);
+            // Show error state
             ['demo-status', 'demo-players', 'demo-bots', 'online-players'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = 'Error';
             });
         }
     } catch (error) {
-        console.error('❌ RefreshStats exception:', error);
+        console.error('RefreshStats failed:', error);
+
+        // Show error state
+        ['demo-status', 'demo-players', 'demo-bots', 'online-players'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = 'Error';
+        });
     } finally {
         refreshStatsRunning = false;
     }
 }
-
-let autoRefreshInterval;
 
 function startAutoRefresh() {
     if (autoRefreshInterval) {
@@ -441,16 +436,6 @@ function startAutoRefresh() {
             refreshStats();
         }
     }, 10000);
-
-    console.log('⏰ Auto-refresh started (10s interval)');
-}
-
-function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-        console.log('🛑 Auto-refresh stopped');
-    }
 }
 
 function showAlert(message, type) {
@@ -524,18 +509,9 @@ function clearDebugLog() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🎯 Admin cockpit initializing...');
     refreshStats();
     startAutoRefresh();
 });
-
-window.adminDebug = {
-    refreshStats: () => refreshStats(),
-    stopRefresh: () => stopAutoRefresh(),
-    startRefresh: () => startAutoRefresh(),
-    testConnection: () => adminAction('get_live_stats'),
-    getRefreshStatus: () => ({ running: refreshStatsRunning, interval: !!autoRefreshInterval })
-};
 </script>
 
 <?php endif; ?>
