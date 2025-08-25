@@ -3,541 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎯 Snaphunt Game Test UI</title>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-    
+    <title>Snaphunt - Interactive Map Test</title>
+    <link rel="stylesheet" href="assets/css/main.css?v=20250824_1110">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f5f7fa;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1rem;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .controls {
-            background: white;
-            padding: 1rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            border-bottom: 1px solid #e1e5e9;
-        }
-        
-        .control-group {
+        .test-container {
             display: flex;
             flex-direction: column;
+            height: 100vh;
+            background: #f8fafc;
+        }
+        
+        .test-header {
+            background: #1e293b;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .test-controls {
+            display: flex;
             gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
         }
         
-        .control-group label {
-            font-weight: 600;
-            font-size: 0.875rem;
-            color: #374151;
-        }
-        
-        .btn {
-            padding: 0.75rem 1rem;
+        .test-btn {
+            padding: 0.5rem 1rem;
+            background: #3b82f6;
+            color: white;
             border: none;
             border-radius: 6px;
-            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
             font-size: 0.875rem;
+            font-weight: 500;
+            transition: background 0.2s;
         }
         
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-success { background: #10b981; color: white; }
-        .btn-warning { background: #f59e0b; color: white; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-secondary { background: #6b7280; color: white; }
+        .test-btn:hover { background: #2563eb; }
+        .test-btn.active { background: #10b981; }
+        .test-btn.danger { background: #ef4444; }
+        .test-btn.danger:hover { background: #dc2626; }
         
-        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        
-        .device-info {
-            background: #f8fafc;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            color: #475569;
-            border-left: 4px solid #3b82f6;
+        .map-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
         }
         
-        .ping-status {
-            background: #fef3c7;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            text-align: center;
-            color: #92400e;
-            display: none;
-        }
-        
-        .ping-status.active { display: block; }
-        .ping-status.receiving { background: #dcfce7; color: #166534; }
-        
-        #map {
-            height: 70vh;
+        #test-map {
             width: 100%;
+            height: 100%;
         }
         
-        .stats {
+        .device-panel {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
             background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             padding: 1rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
+            min-width: 250px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .device-panel.visible {
+            transform: translateX(0);
+        }
+        
+        .device-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .device-item:last-child {
+            border-bottom: none;
+        }
+        
+        .device-info h4 {
+            margin: 0;
             font-size: 0.875rem;
+            color: #1f2937;
         }
         
-        .stat-item {
-            background: #f8fafc;
-            padding: 0.75rem;
-            border-radius: 6px;
-            border-left: 3px solid #10b981;
+        .device-info p {
+            margin: 0;
+            font-size: 0.75rem;
+            color: #6b7280;
         }
         
-        .stat-label { color: #64748b; font-weight: 600; }
-        .stat-value { color: #1e293b; font-weight: bold; margin-top: 0.25rem; }
+        .device-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
         
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .ping-button {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+        
+        .ping-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5);
+        }
+        
+        .ping-button.pinging {
+            animation: pingPulse 0.6s ease-out;
+        }
+        
+        @keyframes pingPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); background: #10b981; }
+            100% { transform: scale(1); }
+        }
+        
+        /* Mobile Optimizations */
         @media (max-width: 768px) {
-            .controls { flex-direction: column; align-items: stretch; }
-            .control-group { flex-direction: row; justify-content: space-between; align-items: center; }
-            #map { height: 60vh; }
+            .test-header {
+                padding: 0.75rem;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .test-controls {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .test-btn {
+                padding: 0.75rem 1.25rem;
+                font-size: 0.9rem;
+            }
+            
+            .device-panel {
+                top: 0.5rem;
+                right: 0.5rem;
+                left: 0.5rem;
+                min-width: unset;
+                max-height: 40vh;
+            }
+            
+            .ping-button {
+                bottom: 1.5rem;
+                right: 1.5rem;
+                width: 70px;
+                height: 70px;
+                font-size: 1.25rem;
+            }
+        }
+        
+        /* Touch-friendly drawing controls */
+        .leaflet-draw-toolbar {
+            margin-top: 1rem !important;
+        }
+        
+        .leaflet-draw-toolbar a {
+            width: 40px !important;
+            height: 40px !important;
+            line-height: 40px !important;
+            font-size: 16px !important;
+        }
+        
+        /* Custom shape styles */
+        .custom-marker {
+            background: #6366f1;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🎯 Snaphunt Game Test UI</h1>
-        <p>Game Area Drawing & GPS Ping Testing</p>
-    </div>
-    
-    <div class="controls">
-        <!-- Game Area Drawing Controls -->
-        <div class="control-group">
-            <label>Game Area Drawing:</label>
-            <button id="draw-circle" class="btn btn-primary">🔵 Draw Circle</button>
-            <button id="draw-rectangle" class="btn btn-primary">⬜ Draw Rectangle</button>
-            <button id="clear-areas" class="btn btn-secondary">🗑️ Clear Areas</button>
+    <div class="test-container">
+        <div class="test-header">
+            <h1>🎯 Snaphunt Interactive Map Test</h1>
+            <div class="test-controls">
+                <button id="clear-shapes" class="test-btn danger">🗑️ Clear All</button>
+                <button id="toggle-drawing" class="test-btn">✏️ Drawing Mode</button>
+                <button id="save-shapes" class="test-btn">💾 Save Shapes</button>
+                <button id="load-shapes" class="test-btn">📂 Load Shapes</button>
+            </div>
         </div>
         
-        <!-- GPS Ping Controls -->
-        <div class="control-group">
-            <label>GPS Ping Test:</label>
-            <button id="send-ping" class="btn btn-success">📡 Send Ping</button>
-            <button id="clear-pings" class="btn btn-warning">🧹 Clear Pings</button>
+        <div class="map-wrapper">
+            <div id="test-map"></div>
+            
+            <div id="device-panel" class="device-panel">
+                <h3 style="margin: 0 0 1rem 0; font-size: 1rem;">📡 Discovered Devices</h3>
+                <div id="device-list">
+                    <p style="color: #6b7280; font-size: 0.875rem; text-align: center;">
+                        Click PING to discover nearby devices
+                    </p>
+                </div>
+            </div>
         </div>
         
-        <!-- Device Info -->
-        <div class="device-info">
-            <div><strong>Device ID:</strong> <span id="device-id">Loading...</span></div>
-            <div><strong>Status:</strong> <span id="device-status">Ready</span></div>
-        </div>
-    </div>
-    
-    <div class="ping-status" id="ping-status">
-        Waiting for GPS ping...
-    </div>
-    
-    <div id="map"></div>
-    
-    <div class="stats">
-        <div class="stat-item">
-            <div class="stat-label">Game Areas Drawn</div>
-            <div class="stat-value" id="areas-count">0</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-label">Pings Sent/Received</div>
-            <div class="stat-value" id="pings-count">0</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-label">Current Location</div>
-            <div class="stat-value" id="current-location">Getting GPS...</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-label">Last Ping Direction</div>
-            <div class="stat-value" id="ping-direction">-</div>
-        </div>
+        <button id="ping-btn" class="ping-button" title="Ping to discover devices">
+            📡
+        </button>
     </div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    
-    <script>
-        class GameTestUI {
-            constructor() {
-                this.map = null;
-                this.drawnItems = null;
-                this.deviceId = this.generateDeviceId();
-                this.currentLocation = null;
-                this.watchId = null;
-                this.pingsReceived = 0;
-                this.pingsSent = 0;
-                this.gameAreas = [];
-                
-                this.init();
-            }
-            
-            generateDeviceId() {
-                let deviceId = localStorage.getItem('test-device-id');
-                if (!deviceId) {
-                    deviceId = 'Device-' + Math.random().toString(36).substr(2, 8);
-                    localStorage.setItem('test-device-id', deviceId);
-                }
-                return deviceId;
-            }
-            
-            init() {
-                console.log('🎮 Game Test UI initializing...');
-                
-                // Initialize map (Vienna center)
-                this.map = L.map('map').setView([48.2082, 16.3738], 13);
-                
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors',
-                    maxZoom: 19
-                }).addTo(this.map);
-                
-                // Initialize drawing layers
-                this.drawnItems = new L.FeatureGroup();
-                this.map.addLayer(this.drawnItems);
-                
-                // Setup draw control
-                this.setupDrawingControls();
-                
-                // Setup ping system
-                this.setupPingSystem();
-                
-                // Start location tracking
-                this.startLocationTracking();
-                
-                // Update UI
-                this.updateDeviceInfo();
-                
-                // Start polling for pings from other devices
-                this.startPingPolling();
-                
-                console.log('✅ Game Test UI ready');
-            }
-            
-            setupDrawingControls() {
-                const drawControl = new L.Control.Draw({
-                    position: 'topright',
-                    draw: {
-                        polygon: false,
-                        polyline: false,
-                        marker: false,
-                        circlemarker: false
-                    },
-                    edit: {
-                        featureGroup: this.drawnItems,
-                        remove: true
-                    }
-                });
-                
-                // Custom drawing buttons
-                document.getElementById('draw-circle').onclick = () => {
-                    this.drawGameArea('circle');
-                };
-                
-                document.getElementById('draw-rectangle').onclick = () => {
-                    this.drawGameArea('rectangle');
-                };
-                
-                document.getElementById('clear-areas').onclick = () => {
-                    this.clearGameAreas();
-                };
-            }
-            
-            drawGameArea(type) {
-                if (!this.currentLocation) {
-                    alert('⚠️ Need GPS location first!');
-                    return;
-                }
-                
-                const lat = this.currentLocation.latitude;
-                const lng = this.currentLocation.longitude;
-                
-                let area;
-                
-                if (type === 'circle') {
-                    // Draw circle with 500m radius
-                    area = L.circle([lat, lng], {
-                        color: '#3b82f6',
-                        fillColor: '#3b82f6',
-                        fillOpacity: 0.2,
-                        radius: 500
-                    }).addTo(this.drawnItems);
-                    
-                    area.bindPopup(`🔵 Game Area (Circle)<br>Radius: 500m<br>Center: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-                    
-                } else if (type === 'rectangle') {
-                    // Draw rectangle 1km x 1km
-                    const offset = 0.005; // roughly 500m
-                    const bounds = [
-                        [lat - offset, lng - offset],
-                        [lat + offset, lng + offset]
-                    ];
-                    
-                    area = L.rectangle(bounds, {
-                        color: '#10b981',
-                        fillColor: '#10b981',
-                        fillOpacity: 0.2
-                    }).addTo(this.drawnItems);
-                    
-                    area.bindPopup(`⬜ Game Area (Rectangle)<br>Size: ~1km x 1km<br>Center: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-                }
-                
-                this.gameAreas.push({
-                    type: type,
-                    center: [lat, lng],
-                    created: new Date()
-                });
-                
-                this.updateStats();
-                console.log(`✅ ${type} game area created`);
-            }
-            
-            clearGameAreas() {
-                this.drawnItems.clearLayers();
-                this.gameAreas = [];
-                this.updateStats();
-                console.log('🗑️ All game areas cleared');
-            }
-            
-            setupPingSystem() {
-                document.getElementById('send-ping').onclick = () => {
-                    this.sendPing();
-                };
-                
-                document.getElementById('clear-pings').onclick = () => {
-                    this.clearPings();
-                };
-            }
-            
-            sendPing() {
-                if (!this.currentLocation) {
-                    alert('⚠️ Need GPS location to send ping!');
-                    return;
-                }
-                
-                const ping = {
-                    id: Date.now(),
-                    fromDevice: this.deviceId,
-                    location: {
-                        latitude: this.currentLocation.latitude,
-                        longitude: this.currentLocation.longitude
-                    },
-                    timestamp: new Date().toISOString(),
-                    expires: Date.now() + 10000 // 10 seconds
-                };
-                
-                // Store ping in localStorage for other devices to see
-                const existingPings = JSON.parse(localStorage.getItem('test-pings') || '[]');
-                existingPings.push(ping);
-                
-                // Clean up expired pings
-                const validPings = existingPings.filter(p => p.expires > Date.now());
-                localStorage.setItem('test-pings', JSON.stringify(validPings));
-                
-                this.pingsSent++;
-                this.updateStats();
-                
-                // Show ping on map
-                this.showPingMarker(ping, 'sent');
-                
-                console.log('📡 Ping sent:', ping);
-                
-                // Update status
-                document.getElementById('ping-status').textContent = 'Ping sent! Visible for 10 seconds...';
-                document.getElementById('ping-status').className = 'ping-status active';
-                
-                setTimeout(() => {
-                    document.getElementById('ping-status').classList.remove('active');
-                }, 3000);
-            }
-            
-            showPingMarker(ping, type) {
-                const lat = ping.location.latitude;
-                const lng = ping.location.longitude;
-                
-                const color = type === 'sent' ? '#10b981' : '#ef4444';
-                const icon = type === 'sent' ? '📤' : '📥';
-                
-                const marker = L.circleMarker([lat, lng], {
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.7,
-                    radius: 15
-                }).addTo(this.map);
-                
-                marker.bindPopup(`${icon} ${type === 'sent' ? 'Ping Sent' : 'Ping Received'}<br>From: ${ping.fromDevice}<br>Time: ${new Date(ping.timestamp).toLocaleTimeString()}`);
-                
-                // Remove marker after 10 seconds
-                setTimeout(() => {
-                    this.map.removeLayer(marker);
-                }, 10000);
-                
-                // Calculate direction if receiving
-                if (type === 'received' && this.currentLocation) {
-                    const direction = this.calculateDirection(
-                        this.currentLocation.latitude,
-                        this.currentLocation.longitude,
-                        lat, lng
-                    );
-                    
-                    document.getElementById('ping-direction').textContent = direction;
-                    
-                    // Draw direction line
-                    const line = L.polyline([
-                        [this.currentLocation.latitude, this.currentLocation.longitude],
-                        [lat, lng]
-                    ], {
-                        color: '#f59e0b',
-                        weight: 3,
-                        opacity: 0.7,
-                        dashArray: '10, 10'
-                    }).addTo(this.map);
-                    
-                    // Remove line after 10 seconds
-                    setTimeout(() => {
-                        this.map.removeLayer(line);
-                    }, 10000);
-                }
-            }
-            
-            calculateDirection(fromLat, fromLng, toLat, toLng) {
-                const dLng = (toLng - fromLng);
-                const y = Math.sin(dLng * Math.PI / 180) * Math.cos(toLat * Math.PI / 180);
-                const x = Math.cos(fromLat * Math.PI / 180) * Math.sin(toLat * Math.PI / 180) - 
-                         Math.sin(fromLat * Math.PI / 180) * Math.cos(toLat * Math.PI / 180) * Math.cos(dLng * Math.PI / 180);
-                
-                let bearing = Math.atan2(y, x) * 180 / Math.PI;
-                bearing = (bearing + 360) % 360;
-                
-                const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                const index = Math.round(bearing / 22.5) % 16;
-                
-                return directions[index] + ` (${Math.round(bearing)}°)`;
-            }
-            
-            startPingPolling() {
-                setInterval(() => {
-                    this.checkForNewPings();
-                }, 1000);
-            }
-            
-            checkForNewPings() {
-                const pings = JSON.parse(localStorage.getItem('test-pings') || '[]');
-                const validPings = pings.filter(p => p.expires > Date.now() && p.fromDevice !== this.deviceId);
-                
-                // Check for new pings we haven't seen
-                validPings.forEach(ping => {
-                    if (!this.receivedPings) this.receivedPings = [];
-                    
-                    if (!this.receivedPings.find(p => p.id === ping.id)) {
-                        this.receivedPings.push(ping);
-                        this.pingsReceived++;
-                        this.showPingMarker(ping, 'received');
-                        
-                        // Show notification
-                        document.getElementById('ping-status').textContent = `📥 Ping received from ${ping.fromDevice}!`;
-                        document.getElementById('ping-status').className = 'ping-status active receiving';
-                        
-                        setTimeout(() => {
-                            document.getElementById('ping-status').classList.remove('active');
-                        }, 3000);
-                        
-                        console.log('📥 Ping received:', ping);
-                    }
-                });
-                
-                this.updateStats();
-            }
-            
-            clearPings() {
-                localStorage.removeItem('test-pings');
-                this.receivedPings = [];
-                this.pingsReceived = 0;
-                this.pingsSent = 0;
-                this.updateStats();
-                console.log('🧹 All pings cleared');
-            }
-            
-            startLocationTracking() {
-                if (!navigator.geolocation) {
-                    console.error('❌ Geolocation not supported');
-                    return;
-                }
-                
-                this.watchId = navigator.geolocation.watchPosition(
-                    (position) => {
-                        this.currentLocation = position.coords;
-                        this.updateLocationDisplay();
-                        
-                        // Add current location marker
-                        if (this.locationMarker) {
-                            this.map.removeLayer(this.locationMarker);
-                        }
-                        
-                        this.locationMarker = L.circleMarker([position.coords.latitude, position.coords.longitude], {
-                            color: '#3b82f6',
-                            fillColor: '#3b82f6',
-                            fillOpacity: 0.8,
-                            radius: 8
-                        }).addTo(this.map);
-                        
-                        this.locationMarker.bindPopup(`📍 Your Location<br>${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}<br>Accuracy: ${Math.round(position.coords.accuracy)}m`);
-                    },
-                    (error) => {
-                        console.error('❌ Location error:', error);
-                        document.getElementById('current-location').textContent = 'GPS Error';
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 30000
-                    }
-                );
-            }
-            
-            updateLocationDisplay() {
-                if (this.currentLocation) {
-                    document.getElementById('current-location').textContent = 
-                        `${this.currentLocation.latitude.toFixed(4)}, ${this.currentLocation.longitude.toFixed(4)}`;
-                }
-            }
-            
-            updateDeviceInfo() {
-                document.getElementById('device-id').textContent = this.deviceId;
-                document.getElementById('device-status').textContent = 'Active';
-            }
-            
-            updateStats() {
-                document.getElementById('areas-count').textContent = this.gameAreas.length;
-                document.getElementById('pings-count').textContent = `${this.pingsSent}/${this.pingsReceived}`;
-            }
-        }
-        
-        // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            window.gameTestUI = new GameTestUI();
-        });
-    </script>
+    <script src="assets/js/shape-drawing.js?v=20250824_1110"></script>
 </body>
 </html>
