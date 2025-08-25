@@ -11,6 +11,7 @@ class InteractiveMapTest {
         this.myLocation = null; // Store current user location
         this.watchPositionId = null;
         this.state = { initialized: false, debugId: Math.random().toString(36).substr(2, 9) };
+        this.radarAutoHideTimeout = null;
 
         this.init();
     }
@@ -376,6 +377,19 @@ class InteractiveMapTest {
         document.getElementById('ping-btn').onclick = () => this.triggerPing();
         document.getElementById('center-my-location').onclick = () => this.centerOnMyLocation();
         document.getElementById('clear-device-markers').onclick = () => this.clearDeviceMarkers();
+
+        // Add radar close button listener
+        const closeRadarBtn = document.getElementById('close-radar');
+        if (closeRadarBtn) {
+            closeRadarBtn.onclick = () => this.hideDiscoveryRadar();
+        }
+
+        // Close radar on ESC key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.hideDiscoveryRadar();
+            }
+        });
 
         // Update connection status periodically
         setInterval(() => {
@@ -748,10 +762,14 @@ class InteractiveMapTest {
 
             if (data.success) {
                 this.lastApiSuccess = true;
+                // Show regular device panel
                 this.displayDiscoveredDevices(data.devices);
-                this.showDeviceMarkersOnMap(data.devices); // NEW: Show devices on map
+                this.showDeviceMarkersOnMap(data.devices);
                 devicePanel.classList.add('visible');
-                
+
+                // NEW: Show radar compass display
+                this.showDiscoveryRadar(data.devices);
+
                 console.log(`📡 PING Results (${data.method} storage):`, {
                     discovered: data.count,
                     devices: data.devices.map(d => ({
@@ -760,11 +778,11 @@ class InteractiveMapTest {
                         location: d.location
                     }))
                 });
-                
-                // Auto-hide after 15 seconds (longer to see map markers)
+
+                // Auto-hide device panel after 10 seconds (radar stays longer)
                 setTimeout(() => {
                     devicePanel.classList.remove('visible');
-                }, 15000);
+                }, 10000);
             }
             
         } catch (error) {
@@ -823,6 +841,140 @@ class InteractiveMapTest {
         });
 
         console.log(`🗺️ Added ${devices.length} device markers to map with fixed positioning`);
+    }
+
+    // Show radar compass for discovered devices
+    showDiscoveryRadar(devices) {
+        const radarEl = document.getElementById('discovery-radar');
+        const devicesContainer = document.getElementById('radar-devices');
+        const deviceItemsContainer = document.getElementById('radar-device-items');
+        
+        // Clear existing indicators
+        devicesContainer.innerHTML = '';
+        deviceItemsContainer.innerHTML = '';
+        
+        if (!devices || devices.length === 0) {
+            this.hideDiscoveryRadar();
+            return;
+        }
+        
+        console.log('📡 Showing discovery radar for', devices.length, 'devices');
+        
+        // Calculate positions for each device
+        devices.forEach((device, index) => {
+            const direction = this.calculateDirection(device.location);
+            const distance = this.calculateMapDistance(device.location);
+            
+            // Add radar indicator
+            this.addRadarDeviceIndicator(device, direction, distance, index);
+            
+            // Add device to list
+            this.addRadarDeviceListItem(device, direction, distance, index);
+        });
+        
+        // Show radar with animation
+        radarEl.classList.remove('hidden');
+        
+        // Auto-hide after 15 seconds (longer than regular discovery panel)
+        this.radarAutoHideTimeout = setTimeout(() => {
+            this.hideDiscoveryRadar();
+        }, 15000);
+        
+        console.log('📡 Discovery radar displayed with', devices.length, 'device indicators');
+    }
+
+    addRadarDeviceIndicator(device, direction, distance, index) {
+        const devicesContainer = document.getElementById('radar-devices');
+        const deviceType = device.deviceType || 'desktop';
+        
+        // Calculate position on radar (distance affects radius from center)
+        const maxRadius = 85; // Maximum distance from center in pixels
+        const minRadius = 25; // Minimum distance from center in pixels
+        
+        // Normalize distance to radar radius (assume max 1000m for radar scale)
+        const normalizedDistance = Math.min(distance / 1000, 1);
+        const radarRadius = minRadius + (normalizedDistance * (maxRadius - minRadius));
+        
+        // Convert bearing to radians for positioning
+        const angleRad = (direction.degrees - 90) * (Math.PI / 180); // -90 to make 0° point up
+        
+        const x = 100 + (Math.cos(angleRad) * radarRadius); // 100 = center of 200px radar
+        const y = 100 + (Math.sin(angleRad) * radarRadius);
+        
+        // Create radar indicator
+        const indicator = document.createElement('div');
+        indicator.className = `radar-device-indicator ${deviceType}`;
+        indicator.style.left = x + 'px';
+        indicator.style.top = y + 'px';
+        indicator.style.animationDelay = (index * 0.1) + 's'; // Staggered animation
+        
+        // Add tooltip and click handler
+        indicator.title = `${this.getDeviceTypeName(deviceType)} - ${direction.degrees}° ${direction.cardinal} (~${distance}m)`;
+        indicator.onclick = () => this.focusOnRadarDevice(device);
+        
+        devicesContainer.appendChild(indicator);
+    }
+
+    addRadarDeviceListItem(device, direction, distance, index) {
+        const itemsContainer = document.getElementById('radar-device-items');
+        const deviceType = device.deviceType || 'desktop';
+        const deviceIcon = this.getDeviceIcon(deviceType);
+        
+        const item = document.createElement('div');
+        item.className = 'radar-device-item';
+        item.style.animationDelay = (index * 0.05) + 's';
+        
+        item.innerHTML = `
+            <div class="radar-device-icon ${deviceType}">
+                ${deviceIcon}
+            </div>
+            <div class="radar-device-info">
+                <div class="radar-device-name">
+                    ${this.getDeviceTypeName(deviceType)}
+                </div>
+                <div class="radar-device-details">
+                    ${direction.degrees}° ${direction.cardinal} • ~${distance}m
+                </div>
+            </div>
+        `;
+        
+        item.onclick = () => this.focusOnRadarDevice(device);
+        itemsContainer.appendChild(item);
+    }
+
+    focusOnRadarDevice(device) {
+        if (!device.location || !device.location.lat || !device.location.lng) return;
+        
+        // Center map on selected device
+        if (this.map) {
+            this.map.setView([device.location.lat, device.location.lng], 16);
+            
+            // Show feedback
+            this.showFeedback(`Focused on ${this.getDeviceTypeName(device.deviceType || 'desktop')}`);
+            
+            // Find and pulse the device marker
+            this.deviceMarkers.eachLayer((marker) => {
+                if (marker.options.deviceData && marker.options.deviceData.id === device.id) {
+                    marker.openPopup();
+                    setTimeout(() => marker.closePopup(), 3000);
+                }
+            });
+        }
+        
+        console.log('🎯 Focused on radar device:', device);
+    }
+
+    hideDiscoveryRadar() {
+        const radarEl = document.getElementById('discovery-radar');
+        radarEl.classList.add('hidden');
+        
+        // Clear auto-hide timeout
+        if (this.radarAutoHideTimeout) {
+            clearTimeout(this.radarAutoHideTimeout);
+            this.radarAutoHideTimeout = null;
+        }
+        
+        console.log('📡 Discovery radar hidden');
     }
 
     setupMobileGestures() {
@@ -935,6 +1087,7 @@ class InteractiveMapTest {
         });
     }
 
+    // Enhanced direction calculation with better precision
     calculateDirection(fromLocation) {
         const myPos = this.getCurrentMapCenter();
         
