@@ -723,3 +723,60 @@ input, select {
     margin: 0.5rem 0;
 }
 
+
+/* Shape Drawing Styles */
+.leaflet-draw-section {
+    margin-bottom: 5px;
+}
+
+.leaflet-draw-toolbar {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    padding: 5px;
+}
+
+.leaflet-draw-toolbar a {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #374151;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.leaflet-draw-toolbar a:hover {
+    background: #6366f1;
+    color: white;
+    border-color: #6366f1;
+}
+
+.leaflet-draw-toolbar a:first-child {
+    border-radius: 6px 0 0 6px;
+}
+
+.leaflet-draw-toolbar a:last-child {
+    border-radius: 0 6px 6px 0;
+}
+
+/* Mobile touch improvements */
+@media (max-width: 768px) {
+    .leaflet-draw-toolbar a {
+        min-width: 44px;
+        min-height: 44px;
+        line-height: 42px;
+    }
+    
+    .leaflet-touch .leaflet-draw-toolbar a {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+/* Shape animation effects */
+.drawn-shape {
+    transition: all 0.3s ease;
+}
+
+.drawn-shape:hover {
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5));
+}
