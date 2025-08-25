@@ -232,47 +232,52 @@
 
         .discovery-info {
             display: flex;
-            alignments: center;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
             gap: 0.75rem;
             font-size: 0.875rem;
         }
 
-        .direction-arrow {
-            font-size: 1.5rem;
-            animation: bounceArrow 1s ease-in-out infinite;
-        }
-
-        @keyframes bounceArrow {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-3px); }
-        }
-
-        /* Device Markers on Map */
+        /* Device Markers on Map - FIXED POSITIONING */
         .device-marker {
             background: #6366f1;
             border: 3px solid white;
             border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            width: 32px;
+            height: 32px;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
             animation: devicePulse 2s infinite;
+            position: relative !important;
+            /* Critical: Ensure proper centering */
+            margin-left: -16px !important;
+            margin-top: -16px !important;
         }
 
-        .device-marker.mobile { background: #10b981; }
-        .device-marker.tablet { background: #f59e0b; }
-        .device-marker.desktop { background: #8b5cf6; }
+        .device-marker.mobile { 
+            background: #10b981; 
+            color: white;
+        }
+        .device-marker.tablet { 
+            background: #f59e0b; 
+            color: white;
+        }
+        .device-marker.desktop { 
+            background: #8b5cf6; 
+            color: white;
+        }
 
         .device-marker.my-location {
             background: #ef4444;
             border: 4px solid white;
-            width: 30px;
-            height: 30px;
-            font-size: 14px;
+            width: 36px;
+            height: 36px;
+            font-size: 16px;
+            margin-left: -18px !important;
+            margin-top: -18px !important;
             animation: myLocationPulse 2s infinite;
         }
 
@@ -280,12 +285,12 @@
             0%, 100% { 
                 opacity: 1;
                 transform: scale(1);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 0 0 0 rgba(239, 68, 68, 0.7);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 0 rgba(239, 68, 68, 0.7);
             }
             50% { 
                 opacity: 0.9;
-                transform: scale(1.1);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 0 0 10px rgba(239, 68, 68, 0);
+                transform: scale(1.15);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 12px rgba(239, 68, 68, 0);
             }
         }
 
@@ -295,9 +300,106 @@
                 transform: scale(1);
             }
             50% { 
-                opacity: 0.8;
+                opacity: 0.85;
                 transform: scale(1.1);
             }
+        }
+
+        /* Compass Direction Display */
+        .compass-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .compass-dial {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: compassGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes compassGlow {
+            0%, 100% { 
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3);
+            }
+            50% { 
+                box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        .compass-needle {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background: linear-gradient(to top, #ef4444, #fca5a5);
+            border-radius: 1px;
+            transform-origin: bottom center;
+            transition: transform 0.3s ease;
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+        }
+
+        .compass-needle::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -2px;
+            width: 6px;
+            height: 6px;
+            background: #ef4444;
+            border-radius: 50%;
+            border: 1px solid white;
+        }
+
+        .compass-center {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: white;
+            border: 2px solid #374151;
+            border-radius: 50%;
+            z-index: 2;
+        }
+
+        .compass-labels {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            font-size: 10px;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .compass-labels::before { content: 'N'; position: absolute; top: 2px; left: 50%; transform: translateX(-50%); }
+        .compass-labels::after { content: 'S'; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
+
+        .compass-labels .east { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+        .compass-labels .west { position: absolute; left: 2px; top: 50%; transform: translateY(-50%); }
+
+        .direction-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+        }
+
+        .direction-degrees {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+        }
+
+        .direction-cardinal {
+            font-size: 0.875rem;
+            opacity: 0.9;
         }
         
         /* Mobile Optimizations */
@@ -351,6 +453,25 @@
                 right: 1rem;
                 max-width: unset;
                 transform: none;
+            }
+
+            .compass-container {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .compass-dial {
+                width: 50px;
+                height: 50px;
+            }
+
+            .compass-needle {
+                height: 16px;
+            }
+
+            .direction-info {
+                align-items: center;
+                text-align: center;
             }
 
             @keyframes discoverySlideDown {
@@ -420,7 +541,7 @@
                 </button>
             </div>
 
-            <!-- Discovery Notification -->
+            <!-- Discovery Notification with Compass -->
             <div id="discovery-notification" class="discovery-notification hidden">
                 <div class="notification-content">
                     <div class="discovery-header">
@@ -428,8 +549,23 @@
                         <strong>You have been discovered!</strong>
                     </div>
                     <div class="discovery-info">
-                        <span id="discovery-by">Device XYZ</span> found you
-                        <div class="direction-arrow" id="direction-arrow">↗</div>
+                        <div style="margin-bottom: 0.5rem;">
+                            <span id="discovery-by">Device XYZ</span> found you
+                        </div>
+                        <div class="compass-container">
+                            <div class="compass-dial">
+                                <div class="compass-labels">
+                                    <span class="east">E</span>
+                                    <span class="west">W</span>
+                                </div>
+                                <div class="compass-needle" id="compass-needle"></div>
+                                <div class="compass-center"></div>
+                            </div>
+                            <div class="direction-info">
+                                <div class="direction-degrees" id="direction-degrees">0°</div>
+                                <div class="direction-cardinal" id="direction-cardinal">N</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -445,4 +581,3 @@
     <script src="assets/js/shape-drawing.js?v=20250824_1110"></script>
 </body>
 </html>
-

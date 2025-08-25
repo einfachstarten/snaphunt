@@ -780,3 +780,5 @@ input, select {
 .drawn-shape:hover {
     filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5));
 }
+
+/* End of shape drawing styles */

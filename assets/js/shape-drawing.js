@@ -214,19 +214,30 @@ class InteractiveMapTest {
             }
         });
 
-        // Add updated "my location" marker
+        // Add updated "my location" marker with FIXED positioning
         const myMarker = L.marker([this.myLocation.lat, this.myLocation.lng], {
             icon: L.divIcon({
-                className: 'device-marker my-location',
-                html: '📍',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
+                className: '', // Remove default leaflet classes
+                html: '<div class="device-marker my-location">📍</div>',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18], // CRITICAL: Center the larger icon
+                popupAnchor: [0, -18]
             }),
             isMyLocation: true
         });
 
-        myMarker.bindPopup('<strong>📍 My Location</strong><br>You are here');
+        myMarker.bindPopup(`
+            <div style="text-align: center; font-family: system-ui;">
+                <strong>📍 My Location</strong><br>
+                <small style="color: #6b7280;">You are here</small><br>
+                <small style="font-size: 0.8em; color: #9ca3af;">
+                    ${this.myLocation.lat.toFixed(4)}, ${this.myLocation.lng.toFixed(4)}
+                </small>
+            </div>
+        `);
+        
         this.deviceMarkers.addLayer(myMarker);
+        console.log(`📍 My location marker updated at [${this.myLocation.lat}, ${this.myLocation.lng}]`);
     }
 
     centerOnMyLocation() {
@@ -496,42 +507,56 @@ class InteractiveMapTest {
             this.showOfflineFallback();
         }
     }
-    
+
     showDeviceMarkersOnMap(devices) {
         // Clear existing device markers (except my location)
         this.clearDeviceMarkers();
 
         devices.forEach(device => {
-            if (!device.location || !device.location.lat || !device.location.lng) return;
+            if (!device.location || !device.location.lat || !device.location.lng) {
+                console.warn('Device missing location data:', device);
+                return;
+            }
 
             const deviceType = device.deviceType || 'desktop';
             const deviceIcon = this.getDeviceIcon(deviceType);
             const distance = this.calculateMapDistance(device.location);
 
+            // FIXED: Proper marker creation with correct positioning
             const marker = L.marker([device.location.lat, device.location.lng], {
                 icon: L.divIcon({
-                    className: `device-marker ${deviceType}`,
-                    html: deviceIcon,
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
+                    className: '', // Remove default leaflet-div-icon class
+                    html: `<div class="device-marker ${deviceType}">${deviceIcon}</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16], // CRITICAL: Center the icon properly
+                    popupAnchor: [0, -16] // Position popup above marker
                 }),
                 isDeviceMarker: true,
                 deviceData: device
             });
 
             const popupContent = `
-                <div style="text-align: center;">
-                    <strong>${deviceIcon} ${this.getDeviceTypeName(deviceType)}</strong><br>
-                    <small>Distance: ~${distance}m</small><br>
-                    <small>Last seen: ${this.formatTimestamp(device.timestamp)}</small>
+                <div style="text-align: center; font-family: system-ui; min-width: 120px;">
+                    <div style="font-size: 1.1em; margin-bottom: 8px;">
+                        <strong>${deviceIcon} ${this.getDeviceTypeName(deviceType)}</strong>
+                    </div>
+                    <div style="color: #6b7280; font-size: 0.9em;">
+                        <div>Distance: ~${distance}m</div>
+                        <div>Last seen: ${this.formatTimestamp(device.timestamp)}</div>
+                        <div style="font-size: 0.8em; margin-top: 4px; color: #9ca3af;">
+                            ID: ${device.id.substring(0, 8)}...
+                        </div>
+                    </div>
                 </div>
             `;
 
             marker.bindPopup(popupContent);
             this.deviceMarkers.addLayer(marker);
+
+            console.log(`📍 Added device marker at [${device.location.lat}, ${device.location.lng}] for ${deviceType}`);
         });
 
-        console.log(`🗺️ Added ${devices.length} device markers to map`);
+        console.log(`🗺️ Added ${devices.length} device markers to map with fixed positioning`);
     }
 
     setupMobileGestures() {
@@ -609,37 +634,48 @@ class InteractiveMapTest {
     showDiscoveryNotification(notification) {
         const notificationEl = document.getElementById('discovery-notification');
         const discoveryBy = document.getElementById('discovery-by');
-        const directionArrow = document.getElementById('direction-arrow');
+        const compassNeedle = document.getElementById('compass-needle');
+        const directionDegrees = document.getElementById('direction-degrees');
+        const directionCardinal = document.getElementById('direction-cardinal');
         
-        // Calculate direction arrow
+        // Calculate direction with compass bearing
         const direction = this.calculateDirection(notification.discoverer_location);
         
         discoveryBy.textContent = this.getDeviceTypeName(notification.discoverer_type);
-        directionArrow.textContent = direction.arrow;
-        directionArrow.title = `${direction.degrees}° - ${direction.cardinal}`;
+        directionDegrees.textContent = `${direction.degrees}°`;
+        directionCardinal.textContent = direction.cardinal;
         
-        // Show notification
+        // Set compass needle rotation - pointing FROM discoverer TO me
+        const needleRotation = (direction.degrees + 180) % 360;
+        compassNeedle.style.transform = `rotate(${needleRotation}deg)`;
+        
+        // Show notification with entrance animation
         notificationEl.classList.remove('hidden');
         
-        // Auto-hide after 8 seconds
+        // Auto-hide after 10 seconds
         setTimeout(() => {
             notificationEl.classList.add('hidden');
-        }, 8000);
+        }, 10000);
         
-        console.log('👁️ Discovery notification shown:', notification);
+        console.log('🧭 Discovery notification shown with compass:', {
+            discoverer: notification.discoverer_type,
+            bearing: direction.degrees,
+            cardinal: direction.cardinal,
+            needleRotation: needleRotation
+        });
     }
 
     calculateDirection(fromLocation) {
         const myPos = this.getCurrentMapCenter();
         
         if (!fromLocation || !fromLocation.lat || !fromLocation.lng) {
-            return { arrow: '❓', degrees: 0, cardinal: 'Unknown' };
+            return { degrees: 0, cardinal: 'Unknown' };
         }
         
-        // Calculate bearing from discoverer to me
-        const dLng = (myPos.lng - fromLocation.lng) * Math.PI / 180;
-        const lat1 = fromLocation.lat * Math.PI / 180;
-        const lat2 = myPos.lat * Math.PI / 180;
+        // Calculate bearing from me to discoverer (where they are relative to me)
+        const dLng = (fromLocation.lng - myPos.lng) * Math.PI / 180;
+        const lat1 = myPos.lat * Math.PI / 180;
+        const lat2 = fromLocation.lat * Math.PI / 180;
         
         const y = Math.sin(dLng) * Math.cos(lat2);
         const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
@@ -647,14 +683,13 @@ class InteractiveMapTest {
         let bearing = Math.atan2(y, x) * 180 / Math.PI;
         bearing = (bearing + 360) % 360; // Normalize to 0-360
         
-        // Convert to arrow and cardinal direction
-        const arrows = ['⬆️', '↗️', '➡️', '↘️', '⬇️', '↙️', '⬅️', '↖️'];
-        const cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        // Convert to cardinal direction
+        const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 
+                          'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
         
-        const index = Math.round(bearing / 45) % 8;
+        const index = Math.round(bearing / 22.5) % 16;
         
         return {
-            arrow: arrows[index],
             degrees: Math.round(bearing),
             cardinal: cardinals[index]
         };
@@ -685,7 +720,7 @@ class InteractiveMapTest {
                 </div>
             `).join('');
     }
-
+    
     showOfflineFallback() {
         // Show debugging info about storage methods
         const devicePanel = document.getElementById('device-panel');
@@ -708,21 +743,21 @@ class InteractiveMapTest {
         devicePanel.classList.add('visible');
         setTimeout(() => devicePanel.classList.remove('visible'), 8000);
     }
-
+    
     getDeviceType(device) {
         const ua = device.userAgent || '';
         if (ua.includes('Mobile')) return 'Mobile Device';
         if (ua.includes('Tablet')) return 'Tablet';
         return 'Desktop';
     }
-
+    
     formatTimestamp(timestamp) {
         const diff = Date.now() - timestamp;
         if (diff < 60000) return 'Just now';
         if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
         return `${Math.floor(diff / 3600000)}h ago`;
     }
-
+    
     calculateDistance(location) {
         const center = this.getCurrentMapCenter();
         
@@ -744,4 +779,3 @@ class InteractiveMapTest {
 document.addEventListener('DOMContentLoaded', () => {
     window.mapTest = new InteractiveMapTest();
 });
-

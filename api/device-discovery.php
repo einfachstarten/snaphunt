@@ -482,4 +482,3 @@ try {
     send_response(500, ['error' => 'Server error']);
 }
 ?>
-
