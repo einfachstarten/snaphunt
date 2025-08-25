@@ -148,6 +148,157 @@
             50% { transform: scale(1.2); background: #10b981; }
             100% { transform: scale(1); }
         }
+
+        /* Map Control Buttons */
+        .map-controls {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 1000;
+        }
+
+        .map-control-btn {
+            padding: 0.75rem 1rem;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+            min-width: 120px;
+        }
+
+        .map-control-btn:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+        }
+
+        .map-control-btn.secondary {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        /* Discovery Notification */
+        .discovery-notification {
+            position: fixed;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+            z-index: 2000;
+            animation: discoverySlideDown 0.4s ease;
+            max-width: 320px;
+            text-align: center;
+        }
+
+        .discovery-notification.hidden {
+            display: none;
+        }
+
+        @keyframes discoverySlideDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .discovery-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .discovery-icon {
+            font-size: 1.25rem;
+            animation: pulse 2s infinite;
+        }
+
+        .discovery-info {
+            display: flex;
+            alignments: center;
+            justify-content: center;
+            gap: 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .direction-arrow {
+            font-size: 1.5rem;
+            animation: bounceArrow 1s ease-in-out infinite;
+        }
+
+        @keyframes bounceArrow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+
+        /* Device Markers on Map */
+        .device-marker {
+            background: #6366f1;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            animation: devicePulse 2s infinite;
+        }
+
+        .device-marker.mobile { background: #10b981; }
+        .device-marker.tablet { background: #f59e0b; }
+        .device-marker.desktop { background: #8b5cf6; }
+
+        .device-marker.my-location {
+            background: #ef4444;
+            border: 4px solid white;
+            width: 30px;
+            height: 30px;
+            font-size: 14px;
+            animation: myLocationPulse 2s infinite;
+        }
+
+        @keyframes myLocationPulse {
+            0%, 100% { 
+                opacity: 1;
+                transform: scale(1);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            50% { 
+                opacity: 0.9;
+                transform: scale(1.1);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
+        @keyframes devicePulse {
+            0%, 100% { 
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 0.8;
+                transform: scale(1.1);
+            }
+        }
         
         /* Mobile Optimizations */
         @media (max-width: 768px) {
@@ -181,6 +332,36 @@
                 width: 70px;
                 height: 70px;
                 font-size: 1.25rem;
+            }
+
+            .map-controls {
+                top: 0.5rem;
+                left: 0.5rem;
+            }
+
+            .map-control-btn {
+                padding: 0.6rem 0.8rem;
+                font-size: 0.8rem;
+                min-width: 100px;
+            }
+
+            .discovery-notification {
+                top: 1rem;
+                left: 1rem;
+                right: 1rem;
+                max-width: unset;
+                transform: none;
+            }
+
+            @keyframes discoverySlideDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-100%);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
             }
         }
         
@@ -228,6 +409,30 @@
                     </p>
                 </div>
             </div>
+
+            <!-- Map Control Buttons -->
+            <div class="map-controls">
+                <button id="center-my-location" class="map-control-btn" title="Center on my location">
+                    📍 My Location
+                </button>
+                <button id="clear-device-markers" class="map-control-btn secondary" title="Clear device markers">
+                    🧹 Clear Markers
+                </button>
+            </div>
+
+            <!-- Discovery Notification -->
+            <div id="discovery-notification" class="discovery-notification hidden">
+                <div class="notification-content">
+                    <div class="discovery-header">
+                        <span class="discovery-icon">👁️</span>
+                        <strong>You have been discovered!</strong>
+                    </div>
+                    <div class="discovery-info">
+                        <span id="discovery-by">Device XYZ</span> found you
+                        <div class="direction-arrow" id="direction-arrow">↗</div>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <button id="ping-btn" class="ping-button" title="Ping to discover devices">
@@ -240,3 +445,4 @@
     <script src="assets/js/shape-drawing.js?v=20250824_1110"></script>
 </body>
 </html>
+
