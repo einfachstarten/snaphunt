@@ -1,10 +1,11 @@
 <?php
-require_once __DIR__ . '/api/database.php';
+if (isset($_POST['action'])) {
+    header('Location: api/admin_ajax.php');
+    exit;
+}
 
-// Simple authentication
 session_start();
 $admin_password = 'snaphunt2024';
-$is_authenticated = false;
 
 if (isset($_POST['password']) && $_POST['password'] === $admin_password) {
     $_SESSION['admin_auth'] = true;
@@ -16,185 +17,6 @@ if (isset($_GET['logout'])) {
     session_destroy();
     header('Location: admin.php');
     exit;
-}
-
-try {
-    $db = new Database();
-    $pdo = $db->getConnection();
-    $db_connected = true;
-} catch (Exception $e) {
-    $db_connected = false;
-    $db_error = $e->getMessage();
-}
-
-// Handle AJAX admin actions
-if (isset($_POST['action']) && $is_authenticated && $db_connected) {
-    header('Content-Type: application/json');
-    
-    switch ($_POST['action']) {
-        case 'reset_demo_game':
-            try {
-                // Get demo game
-                $stmt = $pdo->prepare('SELECT id FROM games WHERE join_code = "DEMO01"');
-                $stmt->execute();
-                $demo = $stmt->fetch();
-                
-                if ($demo) {
-                    $game_id = $demo['id'];
-                    
-                    // Reset game status
-                    $stmt = $pdo->prepare('UPDATE games SET status = "active", started_at = NOW() WHERE id = ?');
-                    $stmt->execute([$game_id]);
-                    
-                    // Clear all captures
-                    $stmt = $pdo->prepare('DELETE FROM captures WHERE game_id = ?');
-                    $stmt->execute([$game_id]);
-                    
-                    // Remove all test bots
-                    $stmt = $pdo->prepare('
-                        DELETE p FROM players p
-                        JOIN teams t ON p.team_id = t.id
-                        WHERE t.game_id = ? AND p.device_id LIKE "test_bot_%"
-                    ');
-                    $stmt->execute([$game_id]);
-                    
-                    // Clear location pings for bots
-                    $stmt = $pdo->prepare('
-                        DELETE lp FROM location_pings lp 
-                        JOIN players p ON lp.player_id = p.id 
-                        JOIN teams t ON p.team_id = t.id 
-                        WHERE t.game_id = ? AND p.device_id LIKE "test_bot_%"
-                    ');
-                    $stmt->execute([$game_id]);
-                    
-                    // Reset real player last_seen
-                    $stmt = $pdo->prepare('
-                        UPDATE players p
-                        JOIN teams t ON p.team_id = t.id
-                        SET p.last_seen = NOW()
-                        WHERE t.game_id = ? AND p.device_id NOT LIKE "test_bot_%"
-                    ');
-                    $stmt->execute([$game_id]);
-                    
-                    echo json_encode(['success' => true, 'message' => 'Demo game reset successfully']);
-                } else {
-                    echo json_encode(['success' => false, 'error' => 'Demo game not found']);
-                }
-            } catch (Exception $e) {
-                echo json_encode(['success' => false, 'error' => 'Reset failed: ' . $e->getMessage()]);
-            }
-            exit;
-            
-        case 'create_demo_bots':
-            try {
-                $count = (int)($_POST['bot_count'] ?? 1);
-                $created_bots = [];
-                
-                // Get demo game and hunted team
-                $stmt = $pdo->prepare('
-                    SELECT g.id as game_id, t.id as team_id 
-                    FROM games g 
-                    JOIN teams t ON g.id = t.game_id 
-                    WHERE g.join_code = "DEMO01" AND t.role = "hunted"
-                ');
-                $stmt->execute();
-                $result = $stmt->fetch();
-                
-                if (!$result) {
-                    echo json_encode(['success' => false, 'error' => 'Demo game or hunted team not found']);
-                    exit;
-                }
-                
-                for ($i = 1; $i <= $count; $i++) {
-                    // Create bot player
-                    $bot_name = 'Demo Bot ' . $i;
-                    $device_id = 'test_bot_demo_' . uniqid();
-                    
-                    $stmt = $pdo->prepare('INSERT INTO players (team_id, device_id, display_name, is_captain, last_seen) VALUES (?, ?, ?, 0, NOW())');
-                    $stmt->execute([$result['team_id'], $device_id, $bot_name]);
-                    $bot_id = $pdo->lastInsertId();
-                    
-                    // Set random location in Vienna area
-                    $base_lat = 48.2082;
-                    $base_lng = 16.3738;
-                    $radius = 0.01; // ~1km
-                    
-                    $lat = $base_lat + (mt_rand(-100, 100) / 10000) * $radius;
-                    $lng = $base_lng + (mt_rand(-100, 100) / 10000) * $radius;
-                    
-                    $stmt = $pdo->prepare('INSERT INTO location_pings (player_id, latitude, longitude) VALUES (?, ?, ?)');
-                    $stmt->execute([$bot_id, $lat, $lng]);
-                    
-                    $created_bots[] = ['id' => $bot_id, 'name' => $bot_name, 'lat' => $lat, 'lng' => $lng];
-                }
-                
-                echo json_encode(['success' => true, 'message' => "$count demo bots created", 'bots' => $created_bots]);
-                
-            } catch (Exception $e) {
-                echo json_encode(['success' => false, 'error' => 'Bot creation failed: ' . $e->getMessage()]);
-            }
-            exit;
-            
-        case 'remove_demo_bots':
-            try {
-                $stmt = $pdo->prepare('
-                    DELETE p FROM players p
-                    JOIN teams t ON p.team_id = t.id
-                    JOIN games g ON t.game_id = g.id
-                    WHERE g.join_code = "DEMO01" AND p.device_id LIKE "test_bot_%"
-                ');
-                $stmt->execute();
-                $removed = $stmt->rowCount();
-                
-                echo json_encode(['success' => true, 'message' => "$removed demo bots removed"]);
-                
-            } catch (Exception $e) {
-                echo json_encode(['success' => false, 'error' => 'Bot removal failed: ' . $e->getMessage()]);
-            }
-            exit;
-            
-        case 'get_live_stats':
-            try {
-                // Demo game stats
-                $stmt = $pdo->prepare('
-                    SELECT 
-                        g.status,
-                        COUNT(DISTINCT p.id) as total_players,
-                        COUNT(DISTINCT CASE WHEN p.device_id LIKE "test_bot_%" THEN p.id END) as bot_players,
-                        COUNT(DISTINCT CASE WHEN p.last_seen > DATE_SUB(NOW(), INTERVAL 2 MINUTE) THEN p.id END) as online_players,
-                        COUNT(DISTINCT c.id) as total_captures
-                    FROM games g
-                    LEFT JOIN teams t ON g.id = t.game_id
-                    LEFT JOIN players p ON t.id = p.team_id
-                    LEFT JOIN captures c ON g.id = c.game_id
-                    WHERE g.join_code = "DEMO01"
-                    GROUP BY g.id, g.status
-                ');
-                $stmt->execute();
-                $demo_stats = $stmt->fetch() ?: ['status' => 'not_found', 'total_players' => 0, 'bot_players' => 0, 'online_players' => 0, 'total_captures' => 0];
-                
-                // System stats
-                $stmt = $pdo->query('SELECT COUNT(*) as total_games FROM games');
-                $total_games = $stmt->fetch()['total_games'];
-                
-                $stmt = $pdo->query('SELECT COUNT(*) as active_games FROM games WHERE status = "active"');
-                $active_games = $stmt->fetch()['active_games'];
-                
-                echo json_encode([
-                    'success' => true,
-                    'demo_stats' => $demo_stats,
-                    'system_stats' => [
-                        'total_games' => $total_games,
-                        'active_games' => $active_games,
-                        'timestamp' => date('Y-m-d H:i:s')
-                    ]
-                ]);
-                
-            } catch (Exception $e) {
-                echo json_encode(['success' => false, 'error' => 'Stats failed: ' . $e->getMessage()]);
-            }
-            exit;
-    }
 }
 ?>
 <!DOCTYPE html>
@@ -489,59 +311,161 @@ if (isset($_POST['action']) && $is_authenticated && $db_connected) {
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-header">
+                🔍 Debug Panel
+                <button onclick="toggleDebugLog()" class="btn btn-secondary btn-sm">Show Logs</button>
+            </div>
+            <div class="card-content" id="debug-panel" style="display: none;">
+                <div id="error-log" style="max-height: 200px; overflow-y: auto; background: #f8f8f8; padding: 10px; font-family: monospace; font-size: 12px;">
+                    Loading debug logs...
+                </div>
+                <button onclick="refreshDebugLog()" class="btn btn-secondary btn-sm">Refresh Log</button>
+                <button onclick="clearDebugLog()" class="btn btn-warning btn-sm">Clear Log</button>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
-// AJAX Helper
 async function adminAction(action, data = {}) {
     try {
+        console.log(`🔄 Admin action: ${action}`, data);
+
         const formData = new FormData();
         formData.append('action', action);
-        
+
         for (const key in data) {
             formData.append(key, data[key]);
         }
-        
-        const response = await fetch('admin.php', {
+
+        const response = await fetch('api/admin_ajax.php', {
             method: 'POST',
             body: formData
         });
-        
+
+        console.log(`📡 Response status: ${response.status}`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('❌ Non-JSON response:', text.substring(0, 500));
+            throw new Error('Server returned non-JSON response');
+        }
+
         const result = await response.json();
-        
+        console.log(`✅ Admin action result:`, result);
+
         if (result.success) {
-            showAlert(result.message, 'success');
+            showAlert(result.message || 'Action completed successfully', 'success');
         } else {
             showAlert(result.error || 'Action failed', 'error');
         }
-        
-        // Refresh stats after any action
-        refreshStats();
-        
+
+        if (action !== 'get_live_stats') {
+            setTimeout(() => refreshStats(), 1000);
+        }
+
         return result;
-        
+
     } catch (error) {
-        showAlert('Network error: ' + error.message, 'error');
+        console.error('❌ Admin action failed:', error);
+        showAlert(`Network error: ${error.message}`, 'error');
         return { success: false, error: error.message };
     }
 }
 
-// UI Functions
+let refreshStatsRunning = false;
+
+async function refreshStats() {
+    if (refreshStatsRunning) {
+        console.warn('⚠️ RefreshStats already running, skipping');
+        return;
+    }
+
+    refreshStatsRunning = true;
+
+    try {
+        console.log('📊 Refreshing admin stats...');
+        const result = await adminAction('get_live_stats');
+
+        if (result.success) {
+            const demo = result.demo_stats;
+            const system = result.system_stats;
+
+            console.log('📈 Stats updated:', { demo, system });
+
+            const statusEl = document.getElementById('demo-status');
+            const playersEl = document.getElementById('demo-players');
+            const botsEl = document.getElementById('demo-bots');
+            const onlineEl = document.getElementById('online-players');
+
+            if (statusEl) statusEl.textContent = (demo?.status || 'unknown').toUpperCase();
+            if (playersEl) playersEl.textContent = demo?.total_players || '0';
+            if (botsEl) botsEl.textContent = demo?.bot_players || '0';
+            if (onlineEl) onlineEl.textContent = demo?.online_players || '0';
+
+            const timestampEl = document.querySelector('.live-indicator');
+            if (timestampEl && system?.timestamp) {
+                timestampEl.title = `Last updated: ${system.timestamp}`;
+            }
+
+        } else {
+            console.error('❌ Stats refresh failed:', result.error);
+            ['demo-status', 'demo-players', 'demo-bots', 'online-players'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = 'Error';
+            });
+        }
+    } catch (error) {
+        console.error('❌ RefreshStats exception:', error);
+    } finally {
+        refreshStatsRunning = false;
+    }
+}
+
+let autoRefreshInterval;
+
+function startAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+
+    autoRefreshInterval = setInterval(() => {
+        if (!refreshStatsRunning) {
+            refreshStats();
+        }
+    }, 10000);
+
+    console.log('⏰ Auto-refresh started (10s interval)');
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        console.log('🛑 Auto-refresh stopped');
+    }
+}
+
 function showAlert(message, type) {
     const alerts = document.getElementById('alerts');
     const alert = document.createElement('div');
     alert.className = `alert alert-${type}`;
     alert.textContent = message;
-    
+
     alerts.appendChild(alert);
-    
+
     setTimeout(() => {
         alert.remove();
     }, 5000);
 }
 
-// Admin Actions
 async function resetDemoGame() {
     if (confirm('Reset demo game to clean state? This will:\n• Clear all captures\n• Remove all test bots\n• Reset game status\n• Keep real players')) {
         await adminAction('reset_demo_game');
@@ -559,23 +483,8 @@ async function removeDemoBots() {
     }
 }
 
-async function refreshStats() {
-    const result = await adminAction('get_live_stats');
-    if (result.success) {
-        const demo = result.demo_stats;
-        const system = result.system_stats;
-        
-        document.getElementById('demo-status').textContent = demo.status.toUpperCase();
-        document.getElementById('demo-players').textContent = demo.total_players || 0;
-        document.getElementById('demo-bots').textContent = demo.bot_players || 0;
-        document.getElementById('online-players').textContent = demo.online_players || 0;
-    }
-}
-
-// System Functions
 function clearBrowserCache() {
     if (confirm('This will force-reload the page to clear browser cache. Continue?')) {
-        // Force cache clear and reload
         window.location.reload(true);
     }
 }
@@ -596,13 +505,37 @@ function openDemoGame() {
     window.open('index.html#DEMO01', '_blank');
 }
 
-// Auto-refresh stats every 10 seconds
-setInterval(refreshStats, 10000);
+function toggleDebugLog() {
+    const panel = document.getElementById('debug-panel');
+    const isHidden = panel.style.display === 'none';
+    panel.style.display = isHidden ? 'block' : 'none';
 
-// Initial stats load
-refreshStats();
+    if (isHidden) {
+        refreshDebugLog();
+    }
+}
 
-console.log('🎯 Snaphunt Admin Cockpit loaded');
+async function refreshDebugLog() {
+    document.getElementById('error-log').textContent = 'Debug logging active. Check browser console for details.';
+}
+
+function clearDebugLog() {
+    document.getElementById('error-log').textContent = '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🎯 Admin cockpit initializing...');
+    refreshStats();
+    startAutoRefresh();
+});
+
+window.adminDebug = {
+    refreshStats: () => refreshStats(),
+    stopRefresh: () => stopAutoRefresh(),
+    startRefresh: () => startAutoRefresh(),
+    testConnection: () => adminAction('get_live_stats'),
+    getRefreshStatus: () => ({ running: refreshStatsRunning, interval: !!autoRefreshInterval })
+};
 </script>
 
 <?php endif; ?>
