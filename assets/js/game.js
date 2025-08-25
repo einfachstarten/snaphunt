@@ -740,8 +740,6 @@ class SnaphuntGame {
 
         this.state.botControls = {
             botsVisible: true,
-            movementActive: false,
-            movementInterval: null
         };
 
         if (createBotBtn) {
@@ -756,8 +754,19 @@ class SnaphuntGame {
             removeBotBtn.onclick = () => this.removeTestBots();
         }
 
-        // Start bot movement polling
-        this.startBotMovement();
+    }
+
+    async botApi(action, payload = {}) {
+        const response = await fetch(`api/test_bot.php?action=${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'API error');
+        }
+        return data;
     }
 
     async createTestBot() {
@@ -766,29 +775,19 @@ class SnaphuntGame {
         // Get user's current position for bot placement
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
-            
-            try {
-                const response = await fetch('api/test_bot.php?action=create_test_bot', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        game_code: this.state.game.code,
-                        center_lat: latitude,
-                        center_lng: longitude,
-                        max_radius_m: 500
-                    })
-                });
 
-                const data = await response.json();
-                if (response.ok) {
-                    console.log('✅ Test bot created:', data.bot);
-                    this.showMessage(`Bot "${data.bot.name}" created nearby!`, 'success');
-                    this.updateBotCounter();
-                } else {
-                    this.showError(data.error || 'Failed to create test bot');
-                }
+            try {
+                const data = await this.botApi('create_test_bot', {
+                    game_code: this.state.game.code,
+                    center_lat: latitude,
+                    center_lng: longitude,
+                    max_radius_m: 500
+                });
+                console.log('✅ Test bot created:', data.bot);
+                this.showMessage(`Bot "${data.bot.name}" created nearby!`, 'success');
+                this.updateBotCounter();
             } catch (error) {
-                this.showError('Network error creating test bot');
+                this.showError(error.message || 'Failed to create test bot');
                 console.error('Create test bot error:', error);
             }
         }, () => {
@@ -799,27 +798,17 @@ class SnaphuntGame {
 
     async createTestBotAt(lat, lng) {
         try {
-            const response = await fetch('api/test_bot.php?action=create_test_bot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    game_code: this.state.game.code,
-                    center_lat: lat,
-                    center_lng: lng,
-                    max_radius_m: 500
-                })
+            const data = await this.botApi('create_test_bot', {
+                game_code: this.state.game.code,
+                center_lat: lat,
+                center_lng: lng,
+                max_radius_m: 500
             });
-
-            const data = await response.json();
-            if (response.ok) {
-                console.log('✅ Test bot created at fallback location:', data.bot);
-                this.showMessage(`Bot "${data.bot.name}" created!`, 'success');
-                this.updateBotCounter();
-            } else {
-                this.showError(data.error || 'Failed to create test bot');
-            }
+            console.log('✅ Test bot created at fallback location:', data.bot);
+            this.showMessage(`Bot "${data.bot.name}" created!`, 'success');
+            this.updateBotCounter();
         } catch (error) {
-            this.showError('Network error creating test bot');
+            this.showError(error.message || 'Failed to create test bot');
             console.error('Create test bot error:', error);
         }
     }
@@ -850,88 +839,27 @@ class SnaphuntGame {
         if (!confirm('Remove all test bots from this game?')) return;
 
         try {
-            const response = await fetch('api/test_bot.php?action=remove_test_bots', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    game_code: this.state.game.code
-                })
+            await this.botApi('remove_test_bots', {
+                game_code: this.state.game.code
+            });
+            console.log('✅ Test bots removed');
+            this.showMessage('All test bots removed!', 'success');
+
+            // Remove bot markers from map
+            this.state.markers.forEach((marker, key) => {
+                if (key.startsWith('player_') && this.isTestBot(key)) {
+                    this.state.map.removeLayer(marker);
+                    this.state.markers.delete(key);
+                }
             });
 
-            const data = await response.json();
-            if (response.ok) {
-                console.log('✅ Test bots removed');
-                this.showMessage('All test bots removed!', 'success');
-                
-                // Remove bot markers from map
-                this.state.markers.forEach((marker, key) => {
-                    if (key.startsWith('player_') && this.isTestBot(key)) {
-                        this.state.map.removeLayer(marker);
-                        this.state.markers.delete(key);
-                    }
-                });
-
-                this.updateBotCounter();
-            } else {
-                this.showError(data.error || 'Failed to remove test bots');
-            }
+            this.updateBotCounter();
         } catch (error) {
-            this.showError('Network error removing test bots');
+            this.showError(error.message || 'Failed to remove test bots');
             console.error('Remove test bots error:', error);
         }
     }
 
-    startBotMovement() {
-        if (this.state.botControls?.movementInterval) return;
-
-        this.state.botControls.movementActive = true;
-        
-        const moveBots = async () => {
-            if (!this.state.game?.code) return;
-
-            // Get user's position for bot movement center
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const { latitude, longitude } = position.coords;
-                
-                try {
-                    const response = await fetch('api/test_bot.php?action=move_bots', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            game_code: this.state.game.code,
-                            center_lat: latitude,
-                            center_lng: longitude,
-                            max_radius_m: 500
-                        })
-                    });
-
-                    const data = await response.json();
-                    if (response.ok && data.updated_bots) {
-                        // Update bot markers on map
-                        data.updated_bots.forEach(bot => {
-                            this.updatePlayerMarker(bot.id, bot.latitude, bot.longitude, 'test_bot');
-                        });
-                    }
-                } catch (error) {
-                    console.warn('Bot movement error:', error);
-                }
-            }, () => {
-                // Fallback movement with default center
-                console.warn('Using fallback coordinates for bot movement');
-            });
-        };
-
-        // Move bots every 5 seconds
-        this.state.botControls.movementInterval = setInterval(moveBots, 5000);
-        
-        // Update status
-        const statusEl = document.getElementById('bot-movement-status');
-        if (statusEl) {
-            statusEl.textContent = 'Movement: Active';
-        }
-
-        console.log('🤖 Bot movement started');
-    }
 
     updateBotCounter() {
         // Count test bot markers
