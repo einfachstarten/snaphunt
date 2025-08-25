@@ -11,6 +11,7 @@ class InteractiveMapTest {
         this.myLocation = null; // Store current user location
         this.watchPositionId = null;
         this.state = { initialized: false, debugId: Math.random().toString(36).substr(2, 9) };
+        this.lastApiSuccess = false;
         this.radarAutoHideTimeout = null;
 
         this.init();
@@ -29,13 +30,11 @@ class InteractiveMapTest {
             this.initializeMap();
             this.setupDrawingTools();
             this.setupEventListeners();
+
+            // CRITICAL: Start map-dependent operations AFTER map is ready
+            this.startDeviceHeartbeat();
+            this.updateConnectionStatus();
         }, 100);
-
-        this.startDeviceHeartbeat();
-
-        // Initialize status
-        this.lastApiSuccess = false;
-        this.updateConnectionStatus();
 
         this.state.initialized = true;
 
@@ -201,8 +200,8 @@ class InteractiveMapTest {
                     const mapSize = this.map.getSize();
                     console.log(`📏 Final map size: ${mapSize.x}x${mapSize.y}`);
 
-                    // Try to get user location for initialization
-                    this.initializeUserLocation();
+                    // CRITICAL: Call map-ready callback
+                    this.onMapReady();
 
                     console.log('✅ Map initialized successfully');
                 }, 100);
@@ -247,6 +246,18 @@ class InteractiveMapTest {
                 `;
             }
         }, 200); // Wait 200ms for CSS to be applied
+    }
+
+    onMapReady() {
+        console.log('🎯 Map is ready, initializing map-dependent features');
+
+        // Initialize user location after map is ready
+        this.initializeUserLocation();
+
+        // Update connection status now that map is available
+        this.updateConnectionStatus();
+
+        console.log('✅ Map-dependent initialization complete');
     }
 
     emergencyMapFix() {
@@ -336,6 +347,12 @@ class InteractiveMapTest {
     }
     
     setupEventListeners() {
+        // CRITICAL: Check if map exists before setting up map events
+        if (!this.map) {
+            console.error('❌ Cannot setup event listeners: map not initialized');
+            return;
+        }
+
         // Drawing event handlers with feedback
         this.map.on(L.Draw.Event.CREATED, (e) => {
             const layer = e.layer;
@@ -445,7 +462,11 @@ class InteractiveMapTest {
     }
 
     updateMyLocationMarker() {
-        if (!this.myLocation) return;
+        // CRITICAL: Check if map and location exist
+        if (!this.myLocation || !this.map) {
+            console.warn('⚠️ Cannot update location marker: missing map or location');
+            return;
+        }
 
         // Remove existing "my location" marker
         this.deviceMarkers.eachLayer((layer) => {
@@ -481,6 +502,12 @@ class InteractiveMapTest {
     }
 
     centerOnMyLocation() {
+        // CRITICAL: Check if map exists
+        if (!this.map) {
+            console.warn('⚠️ Cannot center: map not initialized');
+            return;
+        }
+
         if (!this.myLocation) {
             // Try to get location again
             navigator.geolocation.getCurrentPosition(
@@ -696,7 +723,7 @@ class InteractiveMapTest {
             const deviceInfo = {
                 id: this.deviceId,
                 timestamp: Date.now(),
-                userAgent: navigator.userAgent.substring(0, 100), // Truncate for storage
+                userAgent: navigator.userAgent.substring(0, 100),
                 deviceType: this.detectDeviceType(),
                 screen: {
                     width: screen.width,
@@ -704,7 +731,7 @@ class InteractiveMapTest {
                 },
                 location: this.getCurrentMapCenter()
             };
-            
+
             // Send to SHARED storage (database or file)
             await fetch('api/device-discovery.php', {
                 method: 'POST',
@@ -715,9 +742,13 @@ class InteractiveMapTest {
                 })
             });
             this.lastApiSuccess = true;
+
         } catch (error) {
             console.warn('Device registration to shared storage failed:', error);
             this.lastApiSuccess = false;
+
+            // Don't fail completely - just log and continue
+            this.updateConnectionStatus();
         }
     }
     
@@ -731,6 +762,16 @@ class InteractiveMapTest {
     }
     
     getCurrentMapCenter() {
+        // CRITICAL: Check if map exists before using it
+        if (!this.map) {
+            console.warn('⚠️ Map not initialized, returning default Vienna center');
+            return {
+                lat: 48.2082,
+                lng: 16.3738,
+                zoom: 13
+            };
+        }
+
         const center = this.map.getCenter();
         return {
             lat: center.lat,
