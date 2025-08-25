@@ -16,29 +16,33 @@
 
     <!-- Emergency cache buster - remove after proper implementation -->
     <script>
-    // Emergency cache buster - remove after proper implementation
-    (function() {
-        const timestamp = Date.now();
-        
-        // Update CSS
+// FIXED Emergency Cache Buster
+(function() {
+    const timestamp = Date.now();
+    console.log('🔄 Emergency cache busting:', timestamp);
+    
+    // ALWAYS update CSS URL - remove existing params and add new ones
+    document.addEventListener('DOMContentLoaded', () => {
         const cssLink = document.querySelector('link[href*="main.css"]');
-        if (cssLink && !cssLink.href.includes('?v=')) {
-            cssLink.href += '?v=' + timestamp;
+        if (cssLink) {
+            const basePath = cssLink.href.split('?')[0]; // Remove existing params
+            cssLink.href = `${basePath}?v=${timestamp}&t=${Date.now()}`;
+            console.log('✅ CSS refreshed:', cssLink.href);
         }
         
-        // Update JS when it loads
-        document.addEventListener('DOMContentLoaded', () => {
-            const jsScript = document.querySelector('script[src*="game.js"]');
-            if (jsScript && !jsScript.src.includes('?v=')) {
-                const newScript = document.createElement('script');
-                newScript.src = jsScript.src + '?v=' + timestamp;
-                jsScript.parentNode.replaceChild(newScript, jsScript);
-            }
-        });
-        
-        console.log('🔄 Emergency cache busting applied:', timestamp);
-    })();
-    </script>
+        const jsScript = document.querySelector('script[src*="game.js"]');
+        if (jsScript) {
+            const basePath = jsScript.src.split('?')[0]; // Remove existing params
+            const newScript = document.createElement('script');
+            newScript.src = `${basePath}?v=${timestamp}&t=${Date.now()}`;
+            newScript.onload = () => console.log('✅ JS refreshed:', newScript.src);
+            
+            jsScript.parentNode.insertBefore(newScript, jsScript);
+            jsScript.remove();
+        }
+    });
+})();
+</script>
 </head>
 <body>
     <div id="loading-screen" class="screen active"><div class="spinner"></div></div>
