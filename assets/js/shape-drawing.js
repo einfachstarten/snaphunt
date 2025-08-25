@@ -23,10 +23,13 @@ class InteractiveMapTest {
             return;
         }
 
-        this.setupEventListeners();
-        this.initializeMap();
-        this.setupDrawingTools();
-        this.initializeUserLocation();
+        // Initialize map with delay to ensure DOM is ready
+        setTimeout(() => {
+            this.initializeMap();
+            this.setupDrawingTools();
+            this.setupEventListeners();
+        }, 100);
+
         this.startDeviceHeartbeat();
 
         // Initialize status
@@ -34,38 +37,266 @@ class InteractiveMapTest {
         this.updateConnectionStatus();
 
         this.state.initialized = true;
-        console.log('✅ Interactive map test initialized with simplified controls');
+
+        // Add emergency fix button for debugging (remove in production)
+        if (window.location.hostname === 'localhost' || window.location.hostname.includes('debug')) {
+            setTimeout(() => {
+                const emergencyBtn = document.createElement('button');
+                emergencyBtn.textContent = '🚨 Emergency Map Fix';
+                emergencyBtn.style.cssText = `
+                    position: fixed; top: 70px; right: 10px; z-index: 9999;
+                    padding: 0.5rem; background: #dc2626; color: white;
+                    border: none; border-radius: 6px; cursor: pointer;
+                    font-size: 0.8rem;
+                `;
+                emergencyBtn.onclick = () => this.emergencyMapFix();
+                document.body.appendChild(emergencyBtn);
+            }, 1000);
+        }
+
+        console.log('✅ Interactive map test initialized with debugging');
     }
-    
+
+    debugMapContainer() {
+        const mapContainer = document.getElementById('test-map');
+        const wrapper = document.querySelector('.map-wrapper');
+
+        console.group('🗺️ Map Container Debug');
+        console.log('Map Container Element:', mapContainer);
+        console.log('Map Wrapper Element:', wrapper);
+
+        if (mapContainer) {
+            const rect = mapContainer.getBoundingClientRect();
+            const styles = getComputedStyle(mapContainer);
+
+            console.log('Container Dimensions:', {
+                width: rect.width,
+                height: rect.height,
+                offsetWidth: mapContainer.offsetWidth,
+                offsetHeight: mapContainer.offsetHeight
+            });
+
+            console.log('Container Styles:', {
+                display: styles.display,
+                position: styles.position,
+                width: styles.width,
+                height: styles.height,
+                minHeight: styles.minHeight
+            });
+
+            console.log('Container Classes:', mapContainer.className);
+            console.log('Container HTML:', mapContainer.innerHTML.length + ' characters');
+        }
+
+        if (wrapper) {
+            const wrapperRect = wrapper.getBoundingClientRect();
+            console.log('Wrapper Dimensions:', {
+                width: wrapperRect.width,
+                height: wrapperRect.height
+            });
+        }
+
+        console.groupEnd();
+    }
     initializeMap() {
-        // Initialize map centered on Vienna
-        this.map = L.map('test-map', {
-            zoomControl: true,
-            attributionControl: true,
-            touchZoom: true,
-            doubleClickZoom: false, // Prevent interference with drawing
-            boxZoom: true,
-            keyboard: true,
-            scrollWheelZoom: true,
-            tap: true,
-            tapTolerance: 15, // Mobile optimization
-            worldCopyJump: false
-        }).setView([48.2082, 16.3738], 13);
-        
-        // Add tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19,
-            minZoom: 3
-        }).addTo(this.map);
-        
-        // Add drawn items layer
-        this.map.addLayer(this.drawnItems);
-        
-        // Add device markers layer
-        this.map.addLayer(this.deviceMarkers);
-        
-        console.log('🗺️ Map initialized');
+        console.log(`🗺️ Initializing map (Instance ID: ${this.state.debugId})`);
+
+        const mapContainer = document.getElementById('test-map');
+        if (!mapContainer) {
+            console.error('❌ Map container not found');
+            return;
+        }
+
+        // Debug container before initialization
+        this.debugMapContainer();
+
+        // Complete cleanup of any existing map
+        if (this.map) {
+            console.log('🧹 Cleaning up existing map...');
+            try {
+                this.map.remove();
+                this.map = null;
+            } catch (e) {
+                console.warn('⚠️ Error removing existing map:', e);
+            }
+            this.deviceMarkers.clearLayers();
+        }
+
+        // Nuclear cleanup of map container
+        if (mapContainer._leaflet_id) {
+            console.log('☢️ Nuclear cleanup of map container...');
+            delete mapContainer._leaflet_id;
+            mapContainer.innerHTML = '';
+        }
+
+        // CRITICAL: Force explicit dimensions on map element BEFORE initialization
+        console.log('🔧 Setting explicit map dimensions...');
+        mapContainer.style.width = '100%';
+        mapContainer.style.height = '100%';
+        mapContainer.style.minHeight = '400px';
+        mapContainer.style.display = 'block';
+        mapContainer.style.position = 'relative';
+        mapContainer.style.backgroundColor = '#e5e7eb'; // Visible background for debugging
+
+        // Wait for DOM to update dimensions
+        setTimeout(() => {
+            // Double-check dimensions after CSS application
+            const containerRect = mapContainer.getBoundingClientRect();
+            console.log(`📐 Map container dimensions after CSS: ${containerRect.width}x${containerRect.height}`);
+
+            if (containerRect.width === 0 || containerRect.height === 0) {
+                console.error('❌ Map container still has no dimensions after CSS fix');
+                console.error('🔧 Applying emergency dimension fix...');
+
+                // Emergency fallback dimensions
+                mapContainer.style.width = '100vw';
+                mapContainer.style.height = 'calc(100vh - 60px)';
+                mapContainer.style.minHeight = '400px';
+                mapContainer.style.position = 'absolute';
+                mapContainer.style.top = '60px';
+                mapContainer.style.left = '0';
+            }
+
+            try {
+                console.log('🏗️ Creating Leaflet map...');
+
+                this.map = L.map('test-map', {
+                    // Enhanced Leaflet options for better initialization
+                    preferCanvas: false,
+                    zoomControl: true,
+                    attributionControl: true,
+                    closePopupOnClick: true,
+                    trackResize: true,
+                    worldCopyJump: false
+                }).setView([48.2082, 16.3738], 13); // Vienna center
+
+                console.log('🗺️ Leaflet map created successfully');
+
+                // Add tile layer with error handling
+                const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19,
+                    errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' // 1x1 transparent PNG
+                });
+
+                tileLayer.on('tileerror', (e) => {
+                    console.warn('🗺️ Tile load error:', e);
+                });
+
+                tileLayer.addTo(this.map);
+
+                console.log('🗺️ Tile layer added');
+
+                // Add feature groups
+                this.map.addLayer(this.drawnItems);
+                this.map.addLayer(this.deviceMarkers);
+
+                // Critical: Force map to recognize its size immediately
+                setTimeout(() => {
+                    this.map.invalidateSize(true);
+                    console.log('🔄 Map size invalidated');
+
+                    // Final dimension check
+                    const mapSize = this.map.getSize();
+                    console.log(`📏 Final map size: ${mapSize.x}x${mapSize.y}`);
+
+                    // Try to get user location for initialization
+                    this.initializeUserLocation();
+
+                    console.log('✅ Map initialized successfully');
+                }, 100);
+
+            } catch (error) {
+                console.error('❌ Map initialization failed:', error);
+                console.error('📊 Debug info:', {
+                    containerWidth: mapContainer.offsetWidth,
+                    containerHeight: mapContainer.offsetHeight,
+                    containerDisplay: getComputedStyle(mapContainer).display,
+                    containerPosition: getComputedStyle(mapContainer).position,
+                    hasLeafletId: !!mapContainer._leaflet_id
+                });
+
+                // Last resort: Show error message
+                mapContainer.innerHTML = `
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100%;
+                        background: #fef2f2;
+                        color: #dc2626;
+                        font-family: system-ui;
+                        flex-direction: column;
+                        padding: 2rem;
+                        text-align: center;
+                    ">
+                        <h3>🗺️ Map Initialization Failed</h3>
+                        <p>Container: ${mapContainer.offsetWidth}x${mapContainer.offsetHeight}</p>
+                        <p>Error: ${error.message}</p>
+                        <button onclick="window.location.reload()" style="
+                            padding: 0.5rem 1rem;
+                            background: #dc2626;
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            margin-top: 1rem;
+                        ">Reload Page</button>
+                    </div>
+                `;
+            }
+        }, 200); // Wait 200ms for CSS to be applied
+    }
+
+    emergencyMapFix() {
+        console.log('🚨 Applying emergency map fix...');
+
+        const mapContainer = document.getElementById('test-map');
+        if (!mapContainer) {
+            console.error('No map container found for emergency fix');
+            return;
+        }
+
+        // Apply emergency CSS class
+        mapContainer.className = 'map-emergency-fix';
+
+        // Force dimensions with inline styles
+        mapContainer.style.cssText = `
+            position: fixed !important;
+            top: 60px !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: calc(100vh - 60px) !important;
+            z-index: 1 !important;
+            background: #e5e7eb !important;
+            display: block !important;
+        `;
+
+        // Clear and reinitialize map
+        if (this.map) {
+            this.map.remove();
+            this.map = null;
+        }
+
+        setTimeout(() => {
+            try {
+                this.map = L.map('test-map').setView([48.2082, 16.3738], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+
+                this.map.addLayer(this.drawnItems);
+                this.map.addLayer(this.deviceMarkers);
+
+                this.map.invalidateSize(true);
+                console.log('✅ Emergency map fix successful');
+
+            } catch (error) {
+                console.error('❌ Emergency map fix failed:', error);
+            }
+        }, 300);
     }
 
     setupDrawingTools() {

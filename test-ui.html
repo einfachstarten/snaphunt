@@ -104,17 +104,74 @@
     background: rgba(239, 68, 68, 0.3);
 }
 
+/* CRITICAL: Fix map container visibility */
 .map-wrapper {
     flex: 1;
     position: relative;
     overflow: hidden;
-    min-height: 0; /* Critical for flex child */
+    min-height: 400px; /* CRITICAL: Minimum height */
+    height: calc(100vh - 60px); /* CRITICAL: Subtract header height */
+    display: flex;
+    flex-direction: column;
 }
 
 #test-map {
-    width: 100%;
-    height: 100%;
-    min-height: 400px;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 400px !important; /* CRITICAL: Force minimum height */
+    display: block !important;
+    position: relative !important;
+    background: #e5e7eb; /* Fallback background to see container */
+    z-index: 1;
+}
+
+/* Ensure Leaflet container renders properly */
+#test-map .leaflet-container {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 400px !important;
+}
+
+/* Override any conflicting Leaflet styles */
+.leaflet-container {
+    font: inherit !important;
+}
+
+/* Ensure map tiles load properly */
+.leaflet-tile-pane {
+    z-index: 2 !important;
+}
+
+.leaflet-overlay-pane {
+    z-index: 3 !important;
+}
+
+/* Map control positioning fixes */
+.leaflet-control-container {
+    position: relative !important;
+}
+
+.leaflet-top.leaflet-left {
+    top: 10px !important;
+    left: 10px !important;
+}
+
+/* Emergency map fix - apply if map still not visible */
+.map-emergency-fix {
+    position: fixed !important;
+    top: 60px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: calc(100vh - 60px) !important;
+    z-index: 1 !important;
+    background: #e5e7eb !important;
+}
+
+.map-emergency-fix .leaflet-container {
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .device-panel {
