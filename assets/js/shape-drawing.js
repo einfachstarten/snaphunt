@@ -14,6 +14,19 @@ class InteractiveMapTest {
         this.lastApiSuccess = false;
         this.radarAutoHideTimeout = null;
 
+        // Cache frequently accessed DOM elements
+        this.domCache = {
+            pingBtn: null,
+            devicePanel: null,
+            deviceList: null,
+            connectionStatus: null,
+            deviceCount: null
+        };
+
+        this.initDOMCache();
+        this.setupCleanupHandlers();
+        this.supportedFeatures = this.checkBrowserSupport();
+
         this.init();
     }
 
@@ -190,6 +203,8 @@ class InteractiveMapTest {
                 // Add feature groups
                 this.map.addLayer(this.drawnItems);
                 this.map.addLayer(this.deviceMarkers);
+
+                this.setupMobileGestures();
 
                 // Critical: Force map to recognize its size immediately
                 setTimeout(() => {
@@ -391,7 +406,7 @@ class InteractiveMapTest {
         document.getElementById('toggle-drawing').onclick = () => this.toggleDrawingMode();
         document.getElementById('save-shapes').onclick = () => this.exportShapes();
         document.getElementById('load-shapes').onclick = () => this.importShapes();
-        document.getElementById('ping-btn').onclick = () => this.triggerPing();
+        this.domCache.pingBtn.onclick = () => this.triggerPing();
         document.getElementById('center-my-location').onclick = () => this.centerOnMyLocation();
         document.getElementById('clear-device-markers').onclick = () => this.clearDeviceMarkers();
 
@@ -547,8 +562,8 @@ class InteractiveMapTest {
     }
 
     updateConnectionStatus() {
-        const statusDot = document.getElementById('connection-status');
-        const deviceCount = document.getElementById('device-count');
+        const statusDot = this.domCache.connectionStatus;
+        const deviceCount = this.domCache.deviceCount;
 
         // Update connection status based on last successful API call
         if (statusDot) {
@@ -704,18 +719,32 @@ class InteractiveMapTest {
     }
     
     startDeviceHeartbeat() {
-        // Register this device in SHARED storage and maintain heartbeat
         this.registerDevice();
-        
-        // Send heartbeat every 3 seconds to shared storage
-        setInterval(() => {
-            this.registerDevice();
-        }, 3000);
 
-        // Check for discovery notifications every 2 seconds
-        setInterval(() => {
-            this.checkForDiscoveryNotifications();
-        }, 2000);
+        const heartbeatLoop = () => {
+            if (document.hidden) {
+                setTimeout(heartbeatLoop, 5000);
+                return;
+            }
+
+            if (window.requestIdleCallback) {
+                requestIdleCallback(() => {
+                    this.registerDevice();
+                    setTimeout(heartbeatLoop, 3000);
+                });
+            } else {
+                this.registerDevice();
+                setTimeout(heartbeatLoop, 3000);
+            }
+        };
+
+        setTimeout(heartbeatLoop, 3000);
+
+        this.pingInterval = setInterval(() => {
+            if (!document.hidden) {
+                this.checkForDiscoveryNotifications();
+            }
+        }, 5000);
     }
     
     async registerDevice() {
@@ -781,55 +810,75 @@ class InteractiveMapTest {
     }
     
     async triggerPing() {
-        const pingBtn = document.getElementById('ping-btn');
-        const devicePanel = document.getElementById('device-panel');
-        
-        // Visual feedback
-        pingBtn.classList.add('pinging');
-        setTimeout(() => pingBtn.classList.remove('pinging'), 600);
-        
-        try {
-            const response = await fetch('api/device-discovery.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'ping_discover', // New action that includes ping notifications
-                    requester: this.deviceId,
-                    requester_location: this.getCurrentMapCenter()
-                })
-            });
-            
-            const data = await response.json();
+        const pingBtn = this.domCache.pingBtn;
+        const devicePanel = this.domCache.devicePanel;
 
-            if (data.success) {
+        if (pingBtn.disabled) {
+            console.log('⏳ Ping already in progress');
+            return;
+        }
+
+        pingBtn.disabled = true;
+        pingBtn.classList.add('pinging');
+
+        try {
+            const response = await this.pingWithRetry(3);
+
+            if (response.success) {
                 this.lastApiSuccess = true;
-                // Show regular device panel
-                this.displayDiscoveredDevices(data.devices);
-                this.showDeviceMarkersOnMap(data.devices);
+                this.displayDiscoveredDevices(response.devices);
+                this.showDeviceMarkersOnMap(response.devices);
                 devicePanel.classList.add('visible');
 
-                // NEW: Show radar compass display
-                this.showDiscoveryRadar(data.devices);
-
-                console.log(`📡 PING Results (${data.method} storage):`, {
-                    discovered: data.count,
-                    devices: data.devices.map(d => ({
-                        id: d.id.substring(0, 12) + '...',
-                        type: d.deviceType || 'unknown',
-                        location: d.location
-                    }))
-                });
-
-                // Auto-hide device panel after 10 seconds (radar stays longer)
                 setTimeout(() => {
                     devicePanel.classList.remove('visible');
-                }, 10000);
+                }, 15000);
+            } else {
+                throw new Error(response.error || 'Ping failed');
             }
-            
+
         } catch (error) {
-            console.error('Ping failed:', error);
-            this.showOfflineFallback();
+            console.error('Ping failed after retries:', error);
             this.lastApiSuccess = false;
+            this.showOfflineFallback();
+            this.showFeedback('Discovery failed - using offline mode', 5000);
+
+        } finally {
+            pingBtn.disabled = false;
+            pingBtn.classList.remove('pinging');
+        }
+    }
+
+    async pingWithRetry(maxRetries = 3) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch('api/device-discovery.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'ping_discover',
+                        requester: this.deviceId,
+                        requester_location: this.getCurrentMapCenter()
+                    }),
+                    signal: this.createTimeoutSignal(5000)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                return await response.json();
+
+            } catch (error) {
+                console.warn(`Ping attempt ${attempt}/${maxRetries} failed:`, error);
+
+                if (attempt === maxRetries) {
+                    throw error;
+                }
+
+                const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
         }
     }
 
@@ -1160,11 +1209,15 @@ class InteractiveMapTest {
     }
 
     displayDiscoveredDevices(devices) {
-        const deviceList = document.getElementById('device-list');
+        const deviceList = this.domCache.deviceList;
+        if (!deviceList) return;
 
         this.discoveredDevices.clear();
+
         devices.forEach(device => {
             if (device.id !== this.deviceId) {
+                device.userAgent = this.sanitizeString(device.userAgent, 50);
+                device.id = this.sanitizeString(device.id, 20);
                 this.discoveredDevices.set(device.id, device);
             }
         });
@@ -1175,30 +1228,67 @@ class InteractiveMapTest {
                     No other devices discovered
                 </p>
             `;
-            this.updateConnectionStatus();
             return;
         }
 
-        deviceList.innerHTML = devices
-            .filter(device => device.id !== this.deviceId) // Exclude self
-            .map(device => `
-                <div class="device-item">
-                    <div class="device-info">
-                        <h4>📱 ${this.getDeviceType(device)}</h4>
-                        <p>Last seen: ${this.formatTimestamp(device.timestamp)}</p>
-                        <p>Distance: ${this.calculateDistance(device.location)}m</p>
-                    </div>
-                    <div class="device-status" title="Online"></div>
-                </div>
-            `).join('');
+        deviceList.innerHTML = '';
+        devices
+            .filter(device => device.id !== this.deviceId)
+            .forEach(device => {
+                const deviceItem = document.createElement('div');
+                deviceItem.className = 'device-item';
+
+                const deviceInfo = document.createElement('div');
+                deviceInfo.className = 'device-info';
+
+                const deviceName = document.createElement('h4');
+                deviceName.textContent = `📱 ${this.getDeviceType(device)}`;
+
+                const lastSeen = document.createElement('p');
+                lastSeen.textContent = `Last seen: ${this.formatTimestamp(device.timestamp)}`;
+
+                const distance = document.createElement('p');
+                distance.textContent = `Distance: ${this.calculateDistance(device.location)}m`;
+
+                deviceInfo.appendChild(deviceName);
+                deviceInfo.appendChild(lastSeen);
+                deviceInfo.appendChild(distance);
+
+                const status = document.createElement('div');
+                status.className = 'device-status';
+                status.title = 'Online';
+
+                deviceItem.appendChild(deviceInfo);
+                deviceItem.appendChild(status);
+                deviceList.appendChild(deviceItem);
+            });
 
         this.updateConnectionStatus();
+    }
+
+    sanitizeString(str, maxLength = 100) {
+        if (typeof str !== 'string') {
+            return '';
+        }
+
+        return str
+            .slice(0, maxLength)
+            .replace(/[<>"'&]/g, (match) => {
+                const entities = {
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;',
+                    '&': '&amp;'
+                };
+                return entities[match];
+            });
     }
     
     showOfflineFallback() {
         // Show debugging info about storage methods
-        const devicePanel = document.getElementById('device-panel');
-        const deviceList = document.getElementById('device-list');
+        const devicePanel = this.domCache.devicePanel;
+        const deviceList = this.domCache.deviceList;
         
         deviceList.innerHTML = `
             <div style="color: #f59e0b; font-size: 0.875rem; text-align: center;">
@@ -1216,6 +1306,123 @@ class InteractiveMapTest {
         
         devicePanel.classList.add('visible');
         setTimeout(() => devicePanel.classList.remove('visible'), 8000);
+    }
+
+    cleanup() {
+        console.log('🧹 Cleaning up InteractiveMapTest resources...');
+
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+
+        if (this.watchPositionId) {
+            navigator.geolocation.clearWatch(this.watchPositionId);
+            this.watchPositionId = null;
+        }
+
+        if (this.map) {
+            this.drawnItems.clearLayers();
+            this.deviceMarkers.clearLayers();
+
+            this.map.off();
+            this.map.remove();
+            this.map = null;
+        }
+
+        this.discoveredDevices.clear();
+
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+
+        console.log('✅ Cleanup complete');
+    }
+
+    setupCleanupHandlers() {
+        this.beforeUnloadHandler = () => {
+            this.cleanup();
+        };
+
+        window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (this.pingInterval) {
+                    clearInterval(this.pingInterval);
+                    this.pingInterval = null;
+                }
+            } else {
+                this.startDeviceHeartbeat();
+            }
+        });
+    }
+
+    initDOMCache() {
+        this.domCache.pingBtn = document.getElementById('ping-btn');
+        this.domCache.devicePanel = document.getElementById('device-panel');
+        this.domCache.deviceList = document.getElementById('device-list');
+        this.domCache.connectionStatus = document.getElementById('connection-status');
+        this.domCache.deviceCount = document.getElementById('device-count');
+    }
+
+    setupMobileGestures() {
+        if ('ontouchstart' in window) {
+            console.log('📱 Mobile device detected, setting up touch gestures');
+
+            const mapContainer = this.map.getContainer();
+
+            mapContainer.addEventListener('contextmenu', (e) => {
+                if (this.isDrawingMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }, { passive: false });
+
+            mapContainer.addEventListener('touchstart', (e) => {
+                if (this.isDrawingMode && e.touches.length === 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            mapContainer.addEventListener('touchend', (e) => {
+                if (this.isDrawingMode) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
+    }
+
+    checkBrowserSupport() {
+        const features = {
+            geolocation: !!navigator.geolocation,
+            fetch: !!window.fetch,
+            fileApi: !!(window.File && window.FileReader),
+            canvas: !!document.createElement('canvas').getContext,
+            webgl: !!document.createElement('canvas').getContext('webgl'),
+            requestIdleCallback: !!window.requestIdleCallback,
+            abortController: !!window.AbortController
+        };
+
+        console.log('🔍 Browser support:', features);
+
+        if (!features.geolocation) {
+            this.showFeedback('Geolocation not supported - location features disabled', 10000);
+        }
+
+        if (!features.fetch) {
+            console.error('Fetch not supported - falling back to XMLHttpRequest');
+        }
+
+        return features;
+    }
+
+    createTimeoutSignal(timeout) {
+        if (AbortSignal && typeof AbortSignal.timeout === 'function') {
+            return AbortSignal.timeout(timeout);
+        }
+
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), timeout);
+        return controller.signal;
     }
     
     getDeviceType(device) {
