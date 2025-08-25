@@ -19,34 +19,94 @@ function send_response(int $status, array $data): void
     exit;
 }
 
-// Simple file-based discovery as fallback if database fails
-$discovery_file = __DIR__ . '/../uploads/device_discovery.json';
+// SHARED STORAGE: File-based device discovery (works even without database)
+$discovery_file = __DIR__ . '/../uploads/devices_shared.json';
 
-function ensure_discovery_file($file_path) {
+function ensure_shared_file($file_path) {
     if (!file_exists($file_path)) {
         $dir = dirname($file_path);
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
-        file_put_contents($file_path, json_encode(['devices' => [], 'last_cleanup' => time()]));
+        
+        $initial_data = [
+            'devices' => [],
+            'last_cleanup' => time(),
+            'created' => date('Y-m-d H:i:s')
+        ];
+        file_put_contents($file_path, json_encode($initial_data));
+        chmod($file_path, 0666); // Make writable for web server
     }
 }
 
-function cleanup_old_devices($file_path, $max_age = 300) {
-    ensure_discovery_file($file_path);
+function cleanup_old_devices($file_path, $max_age = 180) { // 3 minutes timeout
+    ensure_shared_file($file_path);
+    
+    // Use file locking to prevent concurrent access issues
+    $lock_file = $file_path . '.lock';
+    $lock = fopen($lock_file, 'w');
+    
+    if (!flock($lock, LOCK_EX)) {
+        fclose($lock);
+        return json_decode(file_get_contents($file_path), true);
+    }
     
     $data = json_decode(file_get_contents($file_path), true);
+    if (!$data) $data = ['devices' => [], 'last_cleanup' => time()];
+    
     $current_time = time();
     
     // Clean up devices older than max_age seconds
-    $data['devices'] = array_filter($data['devices'], function($device) use ($current_time, $max_age) {
+    $data['devices'] = array_values(array_filter($data['devices'], function($device) use ($current_time, $max_age) {
         return ($current_time - ($device['timestamp'] / 1000)) < $max_age;
-    });
+    }));
     
     $data['last_cleanup'] = $current_time;
-    file_put_contents($file_path, json_encode($data));
+    file_put_contents($file_path, json_encode($data, JSON_PRETTY_PRINT));
+    
+    flock($lock, LOCK_UN);
+    fclose($lock);
+    unlink($lock_file);
     
     return $data;
+}
+
+function update_shared_devices($file_path, $device_info) {
+    ensure_shared_file($file_path);
+    
+    // File locking for concurrent access
+    $lock_file = $file_path . '.lock';
+    $lock = fopen($lock_file, 'w');
+    
+    if (!flock($lock, LOCK_EX)) {
+        fclose($lock);
+        return false;
+    }
+    
+    $data = json_decode(file_get_contents($file_path), true);
+    if (!$data) $data = ['devices' => [], 'last_cleanup' => time()];
+    
+    // Update existing device or add new one
+    $updated = false;
+    foreach ($data['devices'] as &$device) {
+        if ($device['id'] === $device_info['id']) {
+            $device = $device_info;
+            $updated = true;
+            break;
+        }
+    }
+    
+    if (!$updated) {
+        $data['devices'][] = $device_info;
+    }
+    
+    file_put_contents($file_path, json_encode($data, JSON_PRETTY_PRINT));
+    
+    flock($lock, LOCK_UN);
+    fclose($lock);
+    unlink($lock_file);
+    
+    return true;
 }
 
 try {
@@ -61,7 +121,9 @@ try {
                 send_response(400, ['error' => 'Invalid device information']);
             }
             
-            // Try database first, fallback to file
+            // Try database first (if available), then shared file
+            $storage_method = 'file'; // Default to file
+            
             try {
                 $db = new Database();
                 $pdo = $db->getConnection();
@@ -76,7 +138,7 @@ try {
                     )
                 ');
                 
-                // Insert or update device
+                // Insert or update device in database
                 $stmt = $pdo->prepare('
                     INSERT INTO device_discovery (id, device_data, last_seen) 
                     VALUES (?, ?, NOW()) 
@@ -85,83 +147,92 @@ try {
                     last_seen = NOW()
                 ');
                 $stmt->execute([$device_info['id'], json_encode($device_info)]);
-                
-                send_response(200, ['success' => true, 'method' => 'database']);
+                $storage_method = 'database';
                 
             } catch (Exception $db_error) {
-                // Fallback to file-based discovery
-                cleanup_old_devices($discovery_file);
-                
-                $data = json_decode(file_get_contents($discovery_file), true);
-                
-                // Update or add device
-                $found = false;
-                foreach ($data['devices'] as &$device) {
-                    if ($device['id'] === $device_info['id']) {
-                        $device = $device_info;
-                        $found = true;
-                        break;
-                    }
-                }
-                
-                if (!$found) {
-                    $data['devices'][] = $device_info;
-                }
-                
-                file_put_contents($discovery_file, json_encode($data));
-                
-                send_response(200, ['success' => true, 'method' => 'file_fallback']);
+                error_log("Database storage failed, using file: " . $db_error->getMessage());
+                // Continue with file storage below
             }
+            
+            // Always also store in shared file as backup/fallback
+            update_shared_devices($discovery_file, $device_info);
+            
+            send_response(200, [
+                'success' => true, 
+                'method' => $storage_method,
+                'device_count' => count(cleanup_old_devices($discovery_file)['devices'])
+            ]);
             break;
             
         case 'discover':
             $requester_id = $input['requester'] ?? '';
+            $devices = [];
+            $storage_method = 'file';
             
+            // Try database first
             try {
                 $db = new Database();
                 $pdo = $db->getConnection();
                 
-                // Get devices seen in last 5 minutes
+                // Get devices seen in last 3 minutes
                 $stmt = $pdo->prepare('
                     SELECT device_data 
                     FROM device_discovery 
-                    WHERE last_seen > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+                    WHERE last_seen > DATE_SUB(NOW(), INTERVAL 3 MINUTE)
                     ORDER BY last_seen DESC
                 ');
                 $stmt->execute();
                 
-                $devices = [];
                 while ($row = $stmt->fetch()) {
                     $device_data = json_decode($row['device_data'], true);
-                    if ($device_data) {
+                    if ($device_data && $device_data['id'] !== $requester_id) {
                         $devices[] = $device_data;
                     }
                 }
                 
-                send_response(200, [
-                    'success' => true,
-                    'devices' => $devices,
-                    'count' => count($devices),
-                    'method' => 'database'
-                ]);
+                if (count($devices) > 0) {
+                    $storage_method = 'database';
+                }
                 
             } catch (Exception $db_error) {
-                // Fallback to file-based discovery
-                cleanup_old_devices($discovery_file);
-                
-                $data = json_decode(file_get_contents($discovery_file), true);
-                
-                send_response(200, [
-                    'success' => true,
-                    'devices' => $data['devices'],
-                    'count' => count($data['devices']),
-                    'method' => 'file_fallback'
-                ]);
+                error_log("Database discovery failed: " . $db_error->getMessage());
+                // Fall through to file method
             }
+            
+            // If database failed or returned no results, use shared file
+            if (count($devices) === 0) {
+                $data = cleanup_old_devices($discovery_file);
+                $devices = array_filter($data['devices'], function($device) use ($requester_id) {
+                    return $device['id'] !== $requester_id; // Exclude requester
+                });
+                $devices = array_values($devices); // Reindex array
+                $storage_method = 'shared_file';
+            }
+            
+            send_response(200, [
+                'success' => true,
+                'devices' => $devices,
+                'count' => count($devices),
+                'method' => $storage_method,
+                'requester' => $requester_id
+            ]);
+            break;
+            
+        case 'status':
+            // Get status of shared discovery system
+            $data = cleanup_old_devices($discovery_file);
+            
+            send_response(200, [
+                'success' => true,
+                'total_devices' => count($data['devices']),
+                'last_cleanup' => date('Y-m-d H:i:s', $data['last_cleanup']),
+                'file_exists' => file_exists($discovery_file),
+                'file_writable' => is_writable(dirname($discovery_file))
+            ]);
             break;
             
         default:
-            send_response(400, ['error' => 'Invalid action']);
+            send_response(400, ['error' => 'Invalid action. Available: register, discover, status']);
     }
     
 } catch (Exception $e) {
@@ -169,3 +240,4 @@ try {
     send_response(500, ['error' => 'Server error']);
 }
 ?>
+

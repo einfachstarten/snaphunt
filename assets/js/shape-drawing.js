@@ -271,7 +271,7 @@ class InteractiveMapTest {
         this.saveShapesToStorage();
     }
     
-    // Device Discovery System
+    // Device Discovery System - SHARED STORAGE APPROACH
     generateDeviceId() {
         let deviceId = localStorage.getItem('test-device-id');
         if (!deviceId) {
@@ -282,13 +282,13 @@ class InteractiveMapTest {
     }
     
     startDeviceHeartbeat() {
-        // Register this device and maintain heartbeat
+        // Register this device in SHARED storage and maintain heartbeat
         this.registerDevice();
         
-        // Send heartbeat every 5 seconds
+        // Send heartbeat every 3 seconds to shared storage
         setInterval(() => {
             this.registerDevice();
-        }, 5000);
+        }, 3000);
     }
     
     async registerDevice() {
@@ -296,15 +296,16 @@ class InteractiveMapTest {
             const deviceInfo = {
                 id: this.deviceId,
                 timestamp: Date.now(),
-                userAgent: navigator.userAgent,
+                userAgent: navigator.userAgent.substring(0, 100), // Truncate for storage
+                deviceType: this.detectDeviceType(),
                 screen: {
                     width: screen.width,
-                    height: screen.height,
-                    pixelRatio: window.devicePixelRatio
+                    height: screen.height
                 },
                 location: this.getCurrentMapCenter()
             };
             
+            // Send to SHARED storage (database or file)
             await fetch('api/device-discovery.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -314,8 +315,17 @@ class InteractiveMapTest {
                 })
             });
         } catch (error) {
-            console.warn('Device registration failed:', error);
+            console.warn('Device registration to shared storage failed:', error);
         }
+    }
+    
+    detectDeviceType() {
+        const ua = navigator.userAgent;
+        if (/Mobile|Android|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(ua)) {
+            if (/iPad|Tablet/i.test(ua)) return 'tablet';
+            return 'mobile';
+        }
+        return 'desktop';
     }
     
     getCurrentMapCenter() {
@@ -440,3 +450,4 @@ class InteractiveMapTest {
 document.addEventListener('DOMContentLoaded', () => {
     window.mapTest = new InteractiveMapTest();
 });
+
