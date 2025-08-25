@@ -22,91 +22,124 @@ function send_response(int $status, array $data): void
 // SHARED STORAGE: File-based device discovery (works even without database)
 $discovery_file = __DIR__ . '/../uploads/devices_shared.json';
 
+function safe_file_operation($file_path, $operation) {
+    $max_retries = 3;
+    $retry_count = 0;
+
+    while ($retry_count < $max_retries) {
+        $lock_file = $file_path . '.lock.' . uniqid();
+        $lock = fopen($lock_file, 'w');
+
+        if (!$lock) {
+            $retry_count++;
+            usleep(100000); // 100ms
+            continue;
+        }
+
+        if (flock($lock, LOCK_EX | LOCK_NB)) {
+            try {
+                $result = $operation($file_path);
+                flock($lock, LOCK_UN);
+                fclose($lock);
+                unlink($lock_file);
+                return $result;
+            } catch (Exception $e) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+                unlink($lock_file);
+                throw $e;
+            }
+        } else {
+            fclose($lock);
+            unlink($lock_file);
+            $retry_count++;
+            usleep(100000);
+        }
+    }
+
+    throw new Exception('Could not acquire file lock after retries');
+}
+
 function ensure_shared_file($file_path) {
-    if (!file_exists($file_path)) {
+    if (!file_exists($file_path) || filesize($file_path) === 0) {
         $dir = dirname($file_path);
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
-        
+
         $initial_data = [
             'devices' => [],
+            'notifications' => [],
             'last_cleanup' => time(),
-            'created' => date('Y-m-d H:i:s')
+            'created' => date('Y-m-d H:i:s'),
+            'version' => '1.0'
         ];
+
         file_put_contents($file_path, json_encode($initial_data));
-        chmod($file_path, 0666); // Make writable for web server
+        chmod($file_path, 0666);
+        return;
+    }
+
+    $data = json_decode(file_get_contents($file_path), true);
+    if (!$data || json_last_error() !== JSON_ERROR_NONE) {
+        error_log("Corrupted discovery file detected, recreating: " . $file_path);
+
+        $backup_file = $file_path . '.corrupted.' . time();
+        copy($file_path, $backup_file);
+
+        $initial_data = [
+            'devices' => [],
+            'notifications' => [],
+            'last_cleanup' => time(),
+            'created' => date('Y-m-d H:i:s'),
+            'version' => '1.0'
+        ];
+
+        file_put_contents($file_path, json_encode($initial_data));
     }
 }
 
-function cleanup_old_devices($file_path, $max_age = 180) { // 3 minutes timeout
+function cleanup_old_devices($file_path, $max_age = 180) {
     ensure_shared_file($file_path);
-    
-    // Use file locking to prevent concurrent access issues
-    $lock_file = $file_path . '.lock';
-    $lock = fopen($lock_file, 'w');
-    
-    if (!flock($lock, LOCK_EX)) {
-        fclose($lock);
-        return json_decode(file_get_contents($file_path), true);
-    }
-    
-    $data = json_decode(file_get_contents($file_path), true);
-    if (!$data) $data = ['devices' => [], 'last_cleanup' => time()];
-    
-    $current_time = time();
-    
-    // Clean up devices older than max_age seconds
-    $data['devices'] = array_values(array_filter($data['devices'], function($device) use ($current_time, $max_age) {
-        return ($current_time - ($device['timestamp'] / 1000)) < $max_age;
-    }));
-    
-    $data['last_cleanup'] = $current_time;
-    file_put_contents($file_path, json_encode($data, JSON_PRETTY_PRINT));
-    
-    flock($lock, LOCK_UN);
-    fclose($lock);
-    unlink($lock_file);
-    
-    return $data;
+
+    return safe_file_operation($file_path, function($path) use ($max_age) {
+        $data = json_decode(file_get_contents($path), true);
+        if (!$data) $data = ['devices' => [], 'notifications' => [], 'last_cleanup' => time(), 'created' => date('Y-m-d H:i:s'), 'version' => '1.0'];
+
+        $current_time = time();
+        $data['devices'] = array_values(array_filter($data['devices'], function($device) use ($current_time, $max_age) {
+            return ($current_time - ($device['timestamp'] / 1000)) < $max_age;
+        }));
+
+        $data['last_cleanup'] = $current_time;
+        file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
+        return $data;
+    });
 }
 
 function update_shared_devices($file_path, $device_info) {
     ensure_shared_file($file_path);
-    
-    // File locking for concurrent access
-    $lock_file = $file_path . '.lock';
-    $lock = fopen($lock_file, 'w');
-    
-    if (!flock($lock, LOCK_EX)) {
-        fclose($lock);
-        return false;
-    }
-    
-    $data = json_decode(file_get_contents($file_path), true);
-    if (!$data) $data = ['devices' => [], 'last_cleanup' => time()];
-    
-    // Update existing device or add new one
-    $updated = false;
-    foreach ($data['devices'] as &$device) {
-        if ($device['id'] === $device_info['id']) {
-            $device = $device_info;
-            $updated = true;
-            break;
+
+    return safe_file_operation($file_path, function($path) use ($device_info) {
+        $data = json_decode(file_get_contents($path), true);
+        if (!$data) $data = ['devices' => [], 'notifications' => [], 'last_cleanup' => time(), 'created' => date('Y-m-d H:i:s'), 'version' => '1.0'];
+
+        $updated = false;
+        foreach ($data['devices'] as &$device) {
+            if ($device['id'] === $device_info['id']) {
+                $device = $device_info;
+                $updated = true;
+                break;
+            }
         }
-    }
-    
-    if (!$updated) {
-        $data['devices'][] = $device_info;
-    }
-    
-    file_put_contents($file_path, json_encode($data, JSON_PRETTY_PRINT));
-    
-    flock($lock, LOCK_UN);
-    fclose($lock);
-    unlink($lock_file);
-    
-    return true;
+
+        if (!$updated) {
+            $data['devices'][] = $device_info;
+        }
+
+        file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
+        return true;
+    });
 }
 
 function createDiscoveryNotifications($pdo, $discovered_devices, $requester_id, $requester_location) {
