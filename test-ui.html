@@ -632,6 +632,350 @@
     0%, 100% { opacity: 0; }
     20%, 80% { opacity: 1; }
 }
+
+/* Discovery Radar Compass */
+.discovery-radar {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, #1e293b, #334155);
+    border: 2px solid #475569;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    z-index: 2500;
+    color: white;
+    font-family: system-ui, sans-serif;
+    animation: radarFadeIn 0.4s ease;
+    min-width: 400px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+}
+
+.discovery-radar.hidden {
+    display: none;
+}
+
+@keyframes radarFadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.radar-container {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.radar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #475569;
+}
+
+.radar-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.radar-icon {
+    font-size: 1.25rem;
+    animation: pulse 2s infinite;
+}
+
+.radar-close-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.radar-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.radar-display {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.radar-dial {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #0f172a 0%, #1e293b 100%);
+    border: 2px solid #475569;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* Radar rings */
+.radar-ring {
+    position: absolute;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.radar-ring-1 {
+    width: 60px;
+    height: 60px;
+}
+
+.radar-ring-2 {
+    width: 120px;
+    height: 120px;
+}
+
+.radar-ring-3 {
+    width: 180px;
+    height: 180px;
+}
+
+/* Compass labels */
+.radar-labels {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    font-size: 10px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.radar-label {
+    position: absolute;
+}
+
+.radar-label.north { top: 5px; left: 50%; transform: translateX(-50%); }
+.radar-label.south { bottom: 5px; left: 50%; transform: translateX(-50%); }
+.radar-label.east { right: 5px; top: 50%; transform: translateY(-50%); }
+.radar-label.west { left: 5px; top: 50%; transform: translateY(-50%); }
+.radar-label.northeast { top: 15px; right: 15px; }
+.radar-label.northwest { top: 15px; left: 15px; }
+.radar-label.southeast { bottom: 15px; right: 15px; }
+.radar-label.southwest { bottom: 15px; left: 15px; }
+
+/* Center user position */
+.radar-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+}
+
+.radar-user-dot {
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border: 2px solid white;
+    border-radius: 50%;
+    animation: userPulse 2s infinite;
+}
+
+@keyframes userPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+}
+
+/* Radar sweep animation */
+.radar-sweep {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2px;
+    height: 90px;
+    background: linear-gradient(to top, transparent 0%, #3b82f6 50%, transparent 100%);
+    transform-origin: bottom center;
+    animation: radarSweep 3s linear infinite;
+    z-index: 5;
+}
+
+@keyframes radarSweep {
+    0% { transform: translate(-50%, 0) rotate(0deg); }
+    100% { transform: translate(-50%, 0) rotate(360deg); }
+}
+
+/* Device indicators on radar */
+.radar-devices {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+}
+
+.radar-device-indicator {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+    transform: translate(-50%, -50%);
+    animation: deviceBlink 2s infinite;
+    cursor: pointer;
+    z-index: 15;
+}
+
+.radar-device-indicator.mobile {
+    background: #10b981;
+}
+
+.radar-device-indicator.tablet {
+    background: #f59e0b;
+}
+
+.radar-device-indicator.desktop {
+    background: #8b5cf6;
+}
+
+@keyframes deviceBlink {
+    0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    50% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.2); }
+}
+
+/* Device list */
+.radar-device-list {
+    flex: 1;
+    min-width: 180px;
+}
+
+.radar-device-list h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 600;
+}
+
+.radar-device-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.radar-device-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.radar-device-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.radar-device-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.radar-device-icon.mobile { background: #10b981; }
+.radar-device-icon.tablet { background: #f59e0b; }
+.radar-device-icon.desktop { background: #8b5cf6; }
+
+.radar-device-info {
+    flex: 1;
+    font-size: 0.8rem;
+}
+
+.radar-device-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.radar-device-details {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.7rem;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .discovery-radar {
+        top: 1rem;
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+        transform: none;
+        max-width: unset;
+        max-height: unset;
+        min-width: unset;
+    }
+    
+    .radar-container {
+        padding: 1rem;
+        height: 100%;
+        overflow-y: auto;
+    }
+    
+    .radar-display {
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .radar-dial {
+        width: 160px;
+        height: 160px;
+    }
+    
+    .radar-sweep {
+        height: 70px;
+    }
+    
+    .radar-device-list {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    .radar-device-items {
+        max-height: 120px;
+    }
+}
 </style>
 </head>
 <body>
@@ -697,6 +1041,58 @@
                             <div class="direction-info">
                                 <div class="direction-degrees" id="direction-degrees">0°</div>
                                 <div class="direction-cardinal" id="direction-cardinal">N</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Discovery Radar Compass - Shows all found device directions -->
+            <div id="discovery-radar" class="discovery-radar hidden">
+                <div class="radar-container">
+                    <div class="radar-header">
+                        <div class="radar-title">
+                            <span class="radar-icon">📡</span>
+                            <strong>Device Discovery Radar</strong>
+                        </div>
+                        <button id="close-radar" class="radar-close-btn">×</button>
+                    </div>
+                    
+                    <div class="radar-display">
+                        <div class="radar-dial">
+                            <!-- Compass labels -->
+                            <div class="radar-labels">
+                                <div class="radar-label north">N</div>
+                                <div class="radar-label south">S</div>
+                                <div class="radar-label east">E</div>
+                                <div class="radar-label west">W</div>
+                                <div class="radar-label northeast">NE</div>
+                                <div class="radar-label northwest">NW</div>
+                                <div class="radar-label southeast">SE</div>
+                                <div class="radar-label southwest">SW</div>
+                            </div>
+                            
+                            <!-- Radar rings -->
+                            <div class="radar-ring radar-ring-1"></div>
+                            <div class="radar-ring radar-ring-2"></div>
+                            <div class="radar-ring radar-ring-3"></div>
+                            
+                            <!-- Center point (user position) -->
+                            <div class="radar-center">
+                                <div class="radar-user-dot"></div>
+                            </div>
+                            
+                            <!-- Dynamic device indicators will be inserted here -->
+                            <div id="radar-devices" class="radar-devices"></div>
+                            
+                            <!-- Radar sweep animation -->
+                            <div class="radar-sweep"></div>
+                        </div>
+                        
+                        <!-- Device list -->
+                        <div class="radar-device-list">
+                            <h4>Discovered Devices</h4>
+                            <div id="radar-device-items" class="radar-device-items">
+                                <!-- Device items will be populated dynamically -->
                             </div>
                         </div>
                     </div>
