@@ -10,18 +10,31 @@ class InteractiveMapTest {
         this.pingInterval = null;
         this.myLocation = null; // Store current user location
         this.watchPositionId = null;
-        
+        this.state = { initialized: false, debugId: Math.random().toString(36).substr(2, 9) };
+
         this.init();
     }
-    
+
     init() {
+        console.log(`🚀 Initializing Snaphunt Interactive Map Test (ID: ${this.state.debugId})`);
+
+        if (this.state.initialized) {
+            console.warn('🚨 Already initialized, skipping');
+            return;
+        }
+
+        this.setupEventListeners();
         this.initializeMap();
         this.setupDrawingTools();
-        this.setupEventListeners();
+        this.initializeUserLocation();
         this.startDeviceHeartbeat();
-        
-        console.log('🎯 Interactive Map Test initialized');
-        console.log('📱 Device ID:', this.deviceId);
+
+        // Initialize status
+        this.lastApiSuccess = false;
+        this.updateConnectionStatus();
+
+        this.state.initialized = true;
+        console.log('✅ Interactive map test initialized with simplified controls');
     }
     
     initializeMap() {
@@ -52,109 +65,91 @@ class InteractiveMapTest {
         // Add device markers layer
         this.map.addLayer(this.deviceMarkers);
         
-        // Try to get user's location for "My Location" feature
-        this.initializeUserLocation();
-        
         console.log('🗺️ Map initialized');
     }
-    
+
     setupDrawingTools() {
-        // Drawing toolbar with mobile-optimized options
+        // Simplified drawing toolbar - ONLY rectangles and circles
         this.drawControl = new L.Control.Draw({
             position: 'topleft',
             draw: {
-                polygon: {
-                    allowIntersection: false,
+                // ONLY these two shapes
+                rectangle: {
                     shapeOptions: {
                         color: '#6366f1',
                         fillColor: '#6366f1',
-                        fillOpacity: 0.2,
-                        weight: 3
-                    }
-                },
-                polyline: {
-                    shapeOptions: {
-                        color: '#ef4444',
-                        weight: 4,
-                        opacity: 0.8
-                    }
-                },
-                rectangle: {
-                    shapeOptions: {
-                        color: '#10b981',
-                        fillColor: '#10b981',
-                        fillOpacity: 0.2,
+                        fillOpacity: 0.25,
                         weight: 3
                     }
                 },
                 circle: {
                     shapeOptions: {
-                        color: '#f59e0b',
-                        fillColor: '#f59e0b',
-                        fillOpacity: 0.2,
+                        color: '#10b981',
+                        fillColor: '#10b981',
+                        fillOpacity: 0.25,
                         weight: 3
                     }
                 },
-                marker: {
-                    icon: L.divIcon({
-                        className: 'custom-marker',
-                        html: '📍',
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    })
-                },
-                circlemarker: false // Disable to simplify
+                // Disable everything else
+                polygon: false,
+                polyline: false,
+                marker: false,
+                circlemarker: false
             },
             edit: {
                 featureGroup: this.drawnItems,
                 remove: true
             }
         });
-        
-        // Initially hidden - activated by button
-        // this.map.addControl(this.drawControl);
     }
     
     setupEventListeners() {
-        // Drawing event handlers
+        // Drawing event handlers with feedback
         this.map.on(L.Draw.Event.CREATED, (e) => {
             const layer = e.layer;
             const type = e.layerType;
-            
+
             // Add metadata to layer
             layer.options.createdAt = Date.now();
             layer.options.createdBy = this.deviceId;
             layer.options.shapeType = type;
-            
+
             this.drawnItems.addLayer(layer);
-            
+
+            // Show feedback
+            this.showFeedback(`${type} created`);
+
             console.log(`✏️ ${type} created:`, layer);
             this.saveShapesToStorage();
         });
-        
+
         this.map.on(L.Draw.Event.EDITED, (e) => {
+            const count = Object.keys(e.layers._layers).length;
+            this.showFeedback(`${count} shape(s) edited`);
             console.log('📝 Shapes edited:', e.layers);
             this.saveShapesToStorage();
         });
-        
+
         this.map.on(L.Draw.Event.DELETED, (e) => {
+            const count = Object.keys(e.layers._layers).length;
+            this.showFeedback(`${count} shape(s) deleted`);
             console.log('🗑️ Shapes deleted:', e.layers);
             this.saveShapesToStorage();
         });
-        
-        // Button event listeners
+
+        // Simplified button event listeners
         document.getElementById('clear-shapes').onclick = () => this.clearAllShapes();
         document.getElementById('toggle-drawing').onclick = () => this.toggleDrawingMode();
         document.getElementById('save-shapes').onclick = () => this.exportShapes();
         document.getElementById('load-shapes').onclick = () => this.importShapes();
         document.getElementById('ping-btn').onclick = () => this.triggerPing();
-        
-        // New button listeners
         document.getElementById('center-my-location').onclick = () => this.centerOnMyLocation();
         document.getElementById('clear-device-markers').onclick = () => this.clearDeviceMarkers();
-        
-        // Touch/mobile optimizations
-        this.setupMobileGestures();
+
+        // Update connection status periodically
+        setInterval(() => {
+            this.updateConnectionStatus();
+        }, 2000);
     }
     
     initializeUserLocation() {
@@ -278,21 +273,57 @@ class InteractiveMapTest {
         
         console.log('🧹 Device markers cleared');
     }
-    
+
+    updateConnectionStatus() {
+        const statusDot = document.getElementById('connection-status');
+        const deviceCount = document.getElementById('device-count');
+
+        // Update connection status based on last successful API call
+        if (statusDot) {
+            statusDot.className = this.lastApiSuccess ? 'status-dot online' : 'status-dot offline';
+        }
+
+        // Update device count
+        if (deviceCount) {
+            const count = this.discoveredDevices.size;
+            deviceCount.textContent = count === 1 ? '1 device' : `${count} devices`;
+        }
+    }
+
+    showFeedback(message, duration = 3000) {
+        // Remove existing feedback
+        document.querySelectorAll('.feedback-message').forEach(el => el.remove());
+
+        // Create new feedback message
+        const feedback = document.createElement('div');
+        feedback.className = 'feedback-message';
+        feedback.textContent = message;
+        document.body.appendChild(feedback);
+
+        // Auto-remove
+        setTimeout(() => {
+            if (feedback.parentNode) {
+                feedback.remove();
+            }
+        }, duration);
+    }
+
     toggleDrawingMode() {
         const btn = document.getElementById('toggle-drawing');
-        
+
         if (!this.isDrawingMode) {
             this.map.addControl(this.drawControl);
             this.isDrawingMode = true;
-            btn.textContent = '🛑 Exit Drawing';
             btn.classList.add('active');
-            console.log('✏️ Drawing mode enabled');
+            btn.title = 'Exit Drawing Mode (rectangles & circles)';
+            this.showFeedback('Drawing mode: Rectangles & Circles only');
+            console.log('✏️ Simplified drawing mode enabled (rectangles & circles only)');
         } else {
             this.map.removeControl(this.drawControl);
             this.isDrawingMode = false;
-            btn.textContent = '✏️ Drawing Mode';
             btn.classList.remove('active');
+            btn.title = 'Enable Drawing Mode';
+            this.showFeedback('Drawing mode disabled');
             console.log('🛑 Drawing mode disabled');
         }
     }
@@ -438,8 +469,10 @@ class InteractiveMapTest {
                     device: deviceInfo
                 })
             });
+            this.lastApiSuccess = true;
         } catch (error) {
             console.warn('Device registration to shared storage failed:', error);
+            this.lastApiSuccess = false;
         }
     }
     
@@ -481,8 +514,9 @@ class InteractiveMapTest {
             });
             
             const data = await response.json();
-            
+
             if (data.success) {
+                this.lastApiSuccess = true;
                 this.displayDiscoveredDevices(data.devices);
                 this.showDeviceMarkersOnMap(data.devices); // NEW: Show devices on map
                 devicePanel.classList.add('visible');
@@ -505,6 +539,7 @@ class InteractiveMapTest {
         } catch (error) {
             console.error('Ping failed:', error);
             this.showOfflineFallback();
+            this.lastApiSuccess = false;
         }
     }
 
@@ -622,13 +657,17 @@ class InteractiveMapTest {
         })
         .then(response => response.json())
         .then(data => {
+            this.lastApiSuccess = true;
             if (data.success && data.notifications.length > 0) {
                 data.notifications.forEach(notification => {
                     this.showDiscoveryNotification(notification);
                 });
             }
         })
-        .catch(error => console.warn('Failed to check notifications:', error));
+        .catch(error => {
+            console.warn('Failed to check notifications:', error);
+            this.lastApiSuccess = false;
+        });
     }
 
     showDiscoveryNotification(notification) {
@@ -697,16 +736,24 @@ class InteractiveMapTest {
 
     displayDiscoveredDevices(devices) {
         const deviceList = document.getElementById('device-list');
-        
+
+        this.discoveredDevices.clear();
+        devices.forEach(device => {
+            if (device.id !== this.deviceId) {
+                this.discoveredDevices.set(device.id, device);
+            }
+        });
+
         if (devices.length === 0) {
             deviceList.innerHTML = `
                 <p style="color: #6b7280; font-size: 0.875rem; text-align: center;">
                     No other devices discovered
                 </p>
             `;
+            this.updateConnectionStatus();
             return;
         }
-        
+
         deviceList.innerHTML = devices
             .filter(device => device.id !== this.deviceId) // Exclude self
             .map(device => `
@@ -719,6 +766,8 @@ class InteractiveMapTest {
                     <div class="device-status" title="Online"></div>
                 </div>
             `).join('');
+
+        this.updateConnectionStatus();
     }
     
     showOfflineFallback() {
