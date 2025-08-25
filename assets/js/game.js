@@ -1824,3 +1824,21 @@ if (document.readyState === 'loading') {
         console.log('🚫 Skipping immediate init, game already exists');
     }
 }
+
+// Cache busting verification and helpers
+console.log('🔍 Cache Busting Verification:', {
+    css_loaded: document.querySelector('link[href*="main.css"]')?.href,
+    js_loaded: document.currentScript?.src,
+    timestamp: new Date().toISOString(),
+    user_agent: navigator.userAgent.substring(0, 50)
+});
+
+// Global debug function
+window.debugCache = {
+    getCacheInfo: () => ({
+        css: document.querySelector('link[href*="main.css"]')?.href,
+        js_files: Array.from(document.scripts).map(s => s.src).filter(s => s),
+        loaded_at: new Date().toISOString()
+    }),
+    forceRefresh: () => window.location.reload(true)
+};

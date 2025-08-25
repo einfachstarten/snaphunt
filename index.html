@@ -10,39 +10,24 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     
-    <!-- CSS with Cache Busting -->
-    <link rel="stylesheet" href="assets/css/main.css?v=20250824_1110" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-    <!-- Emergency cache buster - remove after proper implementation -->
+    <!-- Working Cache Buster - Executes Immediately -->
     <script>
-// FIXED Emergency Cache Buster
+// WORKING Cache Buster - Runs BEFORE CSS processing
 (function() {
     const timestamp = Date.now();
-    console.log('🔄 Emergency cache busting:', timestamp);
-    
-    // ALWAYS update CSS URL - remove existing params and add new ones
-    document.addEventListener('DOMContentLoaded', () => {
-        const cssLink = document.querySelector('link[href*="main.css"]');
-        if (cssLink) {
-            const basePath = cssLink.href.split('?')[0]; // Remove existing params
-            cssLink.href = `${basePath}?v=${timestamp}&t=${Date.now()}`;
-            console.log('✅ CSS refreshed:', cssLink.href);
-        }
-        
-        const jsScript = document.querySelector('script[src*="game.js"]');
-        if (jsScript) {
-            const basePath = jsScript.src.split('?')[0]; // Remove existing params
-            const newScript = document.createElement('script');
-            newScript.src = `${basePath}?v=${timestamp}&t=${Date.now()}`;
-            newScript.onload = () => console.log('✅ JS refreshed:', newScript.src);
-            
-            jsScript.parentNode.insertBefore(newScript, jsScript);
-            jsScript.remove();
-        }
-    });
+    const buildVersion = '20250824_1110';
+
+    console.log('🔄 Cache busting active:', timestamp);
+
+    // Write CSS link with cache busting directly
+    document.write(`<link rel="stylesheet" href="assets/css/main.css?v=${buildVersion}&t=${timestamp}" />`);
+
+    console.log('✅ CSS loaded with cache busting');
 })();
-</script>
+    </script>
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
     <div id="loading-screen" class="screen active"><div class="spinner"></div></div>
@@ -128,6 +113,21 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="assets/js/game.js?v=20250824_1110"></script>
+
+    <!-- Game JS with Cache Busting -->
+    <script>
+// Load game.js with cache busting
+(function() {
+    const timestamp = Date.now();
+    const buildVersion = '20250824_1110';
+
+    const script = document.createElement('script');
+    script.src = `assets/js/game.js?v=${buildVersion}&t=${timestamp}`;
+    script.onload = () => console.log('✅ JS loaded with cache busting');
+    script.onerror = () => console.error('❌ JS failed to load');
+
+    document.head.appendChild(script);
+})();
+    </script>
 </body>
 </html>
