@@ -38,15 +38,17 @@ class InteractiveMapTest {
             return;
         }
 
-        // Initialize map with delay to ensure DOM is ready
+        // CRITICAL: Initialize map with proper callback chain
         setTimeout(() => {
-            this.initializeMap();
-            this.setupDrawingTools();
-            this.setupEventListeners();
-
-            // CRITICAL: Start map-dependent operations AFTER map is ready
-            this.startDeviceHeartbeat();
-            this.updateConnectionStatus();
+            this.initializeMap(() => {
+                // ONLY call these AFTER map is ready
+                console.log('🎯 Map ready, setting up dependent features...');
+                this.setupDrawingTools();
+                this.setupEventListeners();
+                this.startDeviceHeartbeat();
+                this.updateConnectionStatus();
+                console.log('✅ All features initialized');
+            });
         }, 100);
 
         this.state.initialized = true;
@@ -111,12 +113,13 @@ class InteractiveMapTest {
 
         console.groupEnd();
     }
-    initializeMap() {
+    initializeMap(onReady = null) {
         console.log(`🗺️ Initializing map (Instance ID: ${this.state.debugId})`);
 
         const mapContainer = document.getElementById('test-map');
         if (!mapContainer) {
             console.error('❌ Map container not found');
+            if (onReady) onReady(); // Still call callback even on error
             return;
         }
 
@@ -206,25 +209,31 @@ class InteractiveMapTest {
 
                 this.setupMobileGestures();
 
-                // Critical: Force map to recognize its size immediately
-                setTimeout(() => {
-                    this.map.invalidateSize(true);
-                    console.log('🔄 Map size invalidated');
+                    // Critical: Force map to recognize its size immediately
+                    setTimeout(() => {
+                        this.map.invalidateSize(true);
+                        console.log('🔄 Map size invalidated');
 
-                    // Final dimension check
-                    const mapSize = this.map.getSize();
-                    console.log(`📏 Final map size: ${mapSize.x}x${mapSize.y}`);
+                        // Final dimension check
+                        const mapSize = this.map.getSize();
+                        console.log(`📏 Final map size: ${mapSize.x}x${mapSize.y}`);
 
-                    // CRITICAL: Call map-ready callback
-                    this.onMapReady();
+                        // CRITICAL: Initialize user location AFTER map is ready
+                        this.initializeUserLocation();
 
-                    console.log('✅ Map initialized successfully');
-                }, 100);
+                        console.log('✅ Map initialized successfully');
 
-            } catch (error) {
-                console.error('❌ Map initialization failed:', error);
-                console.error('📊 Debug info:', {
-                    containerWidth: mapContainer.offsetWidth,
+                        // CRITICAL: Call callback ONLY when map is completely ready
+                        if (onReady) {
+                            onReady();
+                        }
+
+                    }, 100);
+                
+                } catch (error) {
+                    console.error('❌ Map initialization failed:', error);
+                    console.error('📊 Debug info:', {
+                        containerWidth: mapContainer.offsetWidth,
                     containerHeight: mapContainer.offsetHeight,
                     containerDisplay: getComputedStyle(mapContainer).display,
                     containerPosition: getComputedStyle(mapContainer).position,
@@ -232,48 +241,37 @@ class InteractiveMapTest {
                 });
 
                 // Last resort: Show error message
-                mapContainer.innerHTML = `
-                    <div style="
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        height: 100%;
-                        background: #fef2f2;
-                        color: #dc2626;
-                        font-family: system-ui;
-                        flex-direction: column;
-                        padding: 2rem;
-                        text-align: center;
-                    ">
-                        <h3>🗺️ Map Initialization Failed</h3>
-                        <p>Container: ${mapContainer.offsetWidth}x${mapContainer.offsetHeight}</p>
-                        <p>Error: ${error.message}</p>
-                        <button onclick="window.location.reload()" style="
-                            padding: 0.5rem 1rem;
-                            background: #dc2626;
-                            color: white;
-                            border: none;
-                            border-radius: 6px;
-                            cursor: pointer;
-                            margin-top: 1rem;
-                        ">Reload Page</button>
-                    </div>
-                `;
-            }
-        }, 200); // Wait 200ms for CSS to be applied
-    }
-
-    onMapReady() {
-        console.log('🎯 Map is ready, initializing map-dependent features');
-
-        // Initialize user location after map is ready
-        this.initializeUserLocation();
-
-        // Update connection status now that map is available
-        this.updateConnectionStatus();
-
-        console.log('✅ Map-dependent initialization complete');
-    }
+                    mapContainer.innerHTML = `
+                        <div style="
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            height: 100%;
+                            background: #fef2f2;
+                            color: #dc2626;
+                            font-family: system-ui;
+                            flex-direction: column;
+                            padding: 2rem;
+                            text-align: center;
+                        ">
+                            <h3>🗺️ Map Initialization Failed</h3>
+                            <p>Container: ${mapContainer.offsetWidth}x${mapContainer.offsetHeight}</p>
+                            <p>Error: ${error.message}</p>
+                            <button onclick="window.location.reload()" style="
+                                padding: 0.5rem 1rem;
+                                background: #dc2626;
+                                color: white;
+                                border: none;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                margin-top: 1rem;
+                            ">Reload Page</button>
+                        </div>
+                    `;
+                    if (onReady) onReady(); // Still call callback on error
+                }
+            }, 200); // Wait 200ms for CSS to be applied
+        }
 
     emergencyMapFix() {
         console.log('🚨 Applying emergency map fix...');
@@ -362,13 +360,9 @@ class InteractiveMapTest {
     }
     
     setupEventListeners() {
-        // CRITICAL: Check if map exists before setting up map events
-        if (!this.map) {
-            console.error('❌ Cannot setup event listeners: map not initialized');
-            return;
-        }
+        console.log('🎮 Setting up event listeners (map guaranteed to exist)');
 
-        // Drawing event handlers with feedback
+        // Drawing event handlers - NO MAP CHECK NEEDED NOW
         this.map.on(L.Draw.Event.CREATED, (e) => {
             const layer = e.layer;
             const type = e.layerType;
@@ -379,10 +373,7 @@ class InteractiveMapTest {
             layer.options.shapeType = type;
 
             this.drawnItems.addLayer(layer);
-
-            // Show feedback
             this.showFeedback(`${type} created`);
-
             console.log(`✏️ ${type} created:`, layer);
             this.saveShapesToStorage();
         });
@@ -401,27 +392,24 @@ class InteractiveMapTest {
             this.saveShapesToStorage();
         });
 
-        // Simplified button event listeners
-        document.getElementById('clear-shapes').onclick = () => this.clearAllShapes();
-        document.getElementById('toggle-drawing').onclick = () => this.toggleDrawingMode();
-        document.getElementById('save-shapes').onclick = () => this.exportShapes();
-        document.getElementById('load-shapes').onclick = () => this.importShapes();
-        this.domCache.pingBtn.onclick = () => this.triggerPing();
-        document.getElementById('center-my-location').onclick = () => this.centerOnMyLocation();
-        document.getElementById('clear-device-markers').onclick = () => this.clearDeviceMarkers();
+        // Button event listeners
+        const clearBtn = document.getElementById('clear-shapes');
+        const toggleBtn = document.getElementById('toggle-drawing');
+        const saveBtn = document.getElementById('save-shapes');
+        const loadBtn = document.getElementById('load-shapes');
+        const pingBtn = document.getElementById('ping-btn');
+        const centerBtn = document.getElementById('center-my-location');
+        const clearMarkersBtn = document.getElementById('clear-device-markers');
 
-        // Add radar close button listener
-        const closeRadarBtn = document.getElementById('close-radar');
-        if (closeRadarBtn) {
-            closeRadarBtn.onclick = () => this.hideDiscoveryRadar();
-        }
+        if (clearBtn) clearBtn.onclick = () => this.clearAllShapes();
+        if (toggleBtn) toggleBtn.onclick = () => this.toggleDrawingMode();
+        if (saveBtn) saveBtn.onclick = () => this.exportShapes();
+        if (loadBtn) loadBtn.onclick = () => this.importShapes();
+        if (pingBtn) pingBtn.onclick = () => this.triggerPing();
+        if (centerBtn) centerBtn.onclick = () => this.centerOnMyLocation();
+        if (clearMarkersBtn) clearMarkersBtn.onclick = () => this.clearDeviceMarkers();
 
-        // Close radar on ESC key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.hideDiscoveryRadar();
-            }
-        });
+        console.log('✅ Event listeners setup complete');
 
         // Update connection status periodically
         setInterval(() => {
@@ -477,9 +465,8 @@ class InteractiveMapTest {
     }
 
     updateMyLocationMarker() {
-        // CRITICAL: Check if map and location exist
-        if (!this.myLocation || !this.map) {
-            console.warn('⚠️ Cannot update location marker: missing map or location');
+        if (!this.myLocation) {
+            console.warn('⚠️ No location available for marker update');
             return;
         }
 
@@ -493,14 +480,14 @@ class InteractiveMapTest {
         // Add updated "my location" marker with FIXED positioning
         const myMarker = L.marker([this.myLocation.lat, this.myLocation.lng], {
             icon: L.divIcon({
-                className: '', // Remove default leaflet classes
+                className: '',
                 html: '<div class="device-marker my-location">📍</div>',
                 iconSize: [36, 36],
-                iconAnchor: [18, 18], // CRITICAL: Center the larger icon
+                iconAnchor: [18, 18],
                 popupAnchor: [0, -18]
-            }),
-            isMyLocation: true
-        });
+        }),
+        isMyLocation: true
+    });
 
         myMarker.bindPopup(`
             <div style="text-align: center; font-family: system-ui;">
@@ -511,18 +498,12 @@ class InteractiveMapTest {
                 </small>
             </div>
         `);
-        
+    
         this.deviceMarkers.addLayer(myMarker);
         console.log(`📍 My location marker updated at [${this.myLocation.lat}, ${this.myLocation.lng}]`);
     }
 
     centerOnMyLocation() {
-        // CRITICAL: Check if map exists
-        if (!this.map) {
-            console.warn('⚠️ Cannot center: map not initialized');
-            return;
-        }
-
         if (!this.myLocation) {
             // Try to get location again
             navigator.geolocation.getCurrentPosition(
@@ -791,16 +772,7 @@ class InteractiveMapTest {
     }
     
     getCurrentMapCenter() {
-        // CRITICAL: Check if map exists before using it
-        if (!this.map) {
-            console.warn('⚠️ Map not initialized, returning default Vienna center');
-            return {
-                lat: 48.2082,
-                lng: 16.3738,
-                zoom: 13
-            };
-        }
-
+        // Map is guaranteed to exist when this is called
         const center = this.map.getCenter();
         return {
             lat: center.lat,
