@@ -109,6 +109,116 @@ function update_shared_devices($file_path, $device_info) {
     return true;
 }
 
+function createDiscoveryNotifications($pdo, $discovered_devices, $requester_id, $requester_location) {
+    try {
+        // Get discoverer info
+        $stmt = $pdo->prepare('SELECT device_data FROM device_discovery WHERE id = ?');
+        $stmt->execute([$requester_id]);
+        $discoverer_row = $stmt->fetch();
+        
+        if (!$discoverer_row) return;
+        
+        $discoverer_data = json_decode($discoverer_row['device_data'], true);
+        $discoverer_type = $discoverer_data['deviceType'] ?? 'unknown';
+        
+        // Create notifications for each discovered device
+        $stmt = $pdo->prepare('
+            INSERT INTO discovery_notifications (target_device_id, discoverer_id, discoverer_location, discoverer_type) 
+            VALUES (?, ?, ?, ?)
+        ');
+        
+        foreach ($discovered_devices as $device) {
+            $stmt->execute([
+                $device['id'],
+                $requester_id,
+                json_encode($requester_location),
+                $discoverer_type
+            ]);
+        }
+        
+        error_log("Created " . count($discovered_devices) . " discovery notifications in database");
+        
+    } catch (Exception $e) {
+        error_log("Failed to create database notifications: " . $e->getMessage());
+    }
+}
+
+function createFileNotifications($file_path, $discovered_devices, $requester_id, $requester_location) {
+    try {
+        $data = json_decode(file_get_contents($file_path), true);
+        if (!$data) return;
+        
+        if (!isset($data['notifications'])) {
+            $data['notifications'] = [];
+        }
+        
+        $timestamp = time();
+        
+        // Find discoverer device type
+        $discoverer_type = 'unknown';
+        foreach ($data['devices'] as $device) {
+            if ($device['id'] === $requester_id) {
+                $discoverer_type = $device['deviceType'] ?? 'unknown';
+                break;
+            }
+        }
+        
+        // Create notifications for each discovered device
+        foreach ($discovered_devices as $device) {
+            $data['notifications'][] = [
+                'id' => uniqid(),
+                'target_device_id' => $device['id'],
+                'discoverer_id' => $requester_id,
+                'discoverer_location' => $requester_location,
+                'discoverer_type' => $discoverer_type,
+                'timestamp' => $timestamp * 1000, // JavaScript timestamp
+                'is_read' => false
+            ];
+        }
+        
+        // Clean old notifications (older than 2 minutes)
+        $data['notifications'] = array_filter($data['notifications'], function($notification) use ($timestamp) {
+            return ($timestamp - ($notification['timestamp'] / 1000)) < 120;
+        });
+        
+        file_put_contents($file_path, json_encode($data, JSON_PRETTY_PRINT));
+        
+        error_log("Created " . count($discovered_devices) . " discovery notifications in file");
+        
+    } catch (Exception $e) {
+        error_log("Failed to create file notifications: " . $e->getMessage());
+    }
+}
+
+function getFileNotifications($file_path, $device_id) {
+    try {
+        $data = json_decode(file_get_contents($file_path), true);
+        if (!$data || !isset($data['notifications'])) {
+            return [];
+        }
+        
+        // Get unread notifications for this device
+        $notifications = array_filter($data['notifications'], function($notification) use ($device_id) {
+            return $notification['target_device_id'] === $device_id && !$notification['is_read'];
+        });
+        
+        // Mark as read by updating the file
+        foreach ($data['notifications'] as &$notification) {
+            if ($notification['target_device_id'] === $device_id && !$notification['is_read']) {
+                $notification['is_read'] = true;
+            }
+        }
+        
+        file_put_contents($file_path, json_encode($data, JSON_PRETTY_PRINT));
+        
+        return array_values($notifications);
+        
+    } catch (Exception $e) {
+        error_log("Failed to get file notifications: " . $e->getMessage());
+        return [];
+    }
+}
+
 try {
     $input = json_decode(file_get_contents('php://input'), true);
     $action = $input['action'] ?? '';
@@ -161,6 +271,138 @@ try {
                 'success' => true, 
                 'method' => $storage_method,
                 'device_count' => count(cleanup_old_devices($discovery_file)['devices'])
+            ]);
+            break;
+            
+        case 'ping_discover':
+            // Enhanced discover that also notifies discovered devices
+            $requester_id = $input['requester'] ?? '';
+            $requester_location = $input['requester_location'] ?? null;
+            $devices = [];
+            $storage_method = 'file';
+            
+            // Try database first
+            try {
+                $db = new Database();
+                $pdo = $db->getConnection();
+                
+                // Get devices seen in last 3 minutes
+                $stmt = $pdo->prepare('
+                    SELECT device_data 
+                    FROM device_discovery 
+                    WHERE last_seen > DATE_SUB(NOW(), INTERVAL 3 MINUTE)
+                    ORDER BY last_seen DESC
+                ');
+                $stmt->execute();
+                
+                while ($row = $stmt->fetch()) {
+                    $device_data = json_decode($row['device_data'], true);
+                    if ($device_data && $device_data['id'] !== $requester_id) {
+                        $devices[] = $device_data;
+                    }
+                }
+                
+                if (count($devices) > 0) {
+                    $storage_method = 'database';
+                    
+                    // Create notifications for discovered devices
+                    createDiscoveryNotifications($pdo, $devices, $requester_id, $requester_location);
+                }
+                
+            } catch (Exception $db_error) {
+                error_log("Database ping_discover failed: " . $db_error->getMessage());
+            }
+            
+            // If database failed or returned no results, use shared file
+            if (count($devices) === 0) {
+                $data = cleanup_old_devices($discovery_file);
+                $devices = array_filter($data['devices'], function($device) use ($requester_id) {
+                    return $device['id'] !== $requester_id;
+                });
+                $devices = array_values($devices);
+                $storage_method = 'shared_file';
+                
+                // Create notifications in file for discovered devices
+                if (count($devices) > 0) {
+                    createFileNotifications($discovery_file, $devices, $requester_id, $requester_location);
+                }
+            }
+            
+            send_response(200, [
+                'success' => true,
+                'devices' => $devices,
+                'count' => count($devices),
+                'method' => $storage_method,
+                'requester' => $requester_id
+            ]);
+            break;
+            
+        case 'check_notifications':
+            // Check for discovery notifications for a specific device
+            $device_id = $input['device_id'] ?? '';
+            if (!$device_id) {
+                send_response(400, ['error' => 'Missing device_id']);
+            }
+            
+            $notifications = [];
+            
+            // Try database first
+            try {
+                $db = new Database();
+                $pdo = $db->getConnection();
+                
+                // Create notifications table if not exists
+                $pdo->exec('
+                    CREATE TABLE IF NOT EXISTS discovery_notifications (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        target_device_id VARCHAR(50),
+                        discoverer_id VARCHAR(50),
+                        discoverer_location JSON,
+                        discoverer_type VARCHAR(20),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_read BOOLEAN DEFAULT FALSE,
+                        INDEX idx_target_device (target_device_id, is_read),
+                        INDEX idx_created_at (created_at)
+                    )
+                ');
+                
+                // Get unread notifications for this device
+                $stmt = $pdo->prepare('
+                    SELECT * FROM discovery_notifications 
+                    WHERE target_device_id = ? AND is_read = FALSE 
+                    ORDER BY created_at DESC
+                ');
+                $stmt->execute([$device_id]);
+                
+                while ($row = $stmt->fetch()) {
+                    $notifications[] = [
+                        'id' => $row['id'],
+                        'discoverer_id' => $row['discoverer_id'],
+                        'discoverer_location' => json_decode($row['discoverer_location'], true),
+                        'discoverer_type' => $row['discoverer_type'],
+                        'timestamp' => strtotime($row['created_at']) * 1000
+                    ];
+                }
+                
+                // Mark notifications as read
+                if (count($notifications) > 0) {
+                    $stmt = $pdo->prepare('
+                        UPDATE discovery_notifications 
+                        SET is_read = TRUE 
+                        WHERE target_device_id = ? AND is_read = FALSE
+                    ');
+                    $stmt->execute([$device_id]);
+                }
+                
+            } catch (Exception $db_error) {
+                // Fallback to file-based notifications
+                $notifications = getFileNotifications($discovery_file, $device_id);
+            }
+            
+            send_response(200, [
+                'success' => true,
+                'notifications' => $notifications,
+                'count' => count($notifications)
             ]);
             break;
             
